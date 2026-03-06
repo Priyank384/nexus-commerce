@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.ProductResponseDto;
+import com.example.nexusCommerce.exceptions.ProductNotFoundException;
 import com.example.nexusCommerce.mapper.ProductMapper;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Product;
@@ -26,7 +27,7 @@ public class ProductServices {
 
     public ProductResponseDto getProductById(Long id){
         Product product = productRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Product not found"));
+                .orElseThrow(() -> new ProductNotFoundException(id));
         return ProductMapper.toDto(product);
     }
     public Product createProduct(CreateProductRequestDto requestDto){
