@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class FakeCommerceApplication {
+public class NexusCommerceApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(FakeCommerceApplication.class, args);
+		SpringApplication.run(NexusCommerceApplication.class, args);
 	}
 
 }
