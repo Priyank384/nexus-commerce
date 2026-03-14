@@ -9,7 +9,7 @@ public class ProductMapper {
         return ProductResponseDto.builder()
                                 .id(product.getId())
                                 .title(product.getTitle())
-                                .category(product.getCategory())
+                                // .category(product.getCategory())
                                 .description(product.getDescription())
                                 .image(product.getImage())
                                 .price(product.getPrice())

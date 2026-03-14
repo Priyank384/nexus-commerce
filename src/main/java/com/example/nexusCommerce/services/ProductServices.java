@@ -33,7 +33,7 @@ public class ProductServices {
     public Product createProduct(CreateProductRequestDto requestDto){
         Product newProduct = Product.builder()
                             .title(requestDto.getTitle())
-                            .category(requestDto.getCategory())
+                            // .category(requestDto.getCategory())
                             .description(requestDto.getDescription())
                             .image(requestDto.getImage())
                             .price(requestDto.getPrice())

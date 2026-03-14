@@ -2,7 +2,7 @@ spring:
   config:
     import: optional:file:.env[.properties]
   application:
-    name: FakeCommerce
+    name: NexusCommerce
   datasource:
     url: jdbc:mysql://localhost:3306/fakecommerce
     username: ${username}
