@@ -8,17 +8,16 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.services.CategoryService;
 
-import io.swagger.v3.oas.annotations.parameters.RequestBody;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+// import io.swagger.v3.oas.annotations.parameters.RequestBody;
+import lombok.RequiredArgsConstructor;
 
-@Data
-@AllArgsConstructor
+@RequiredArgsConstructor
 @RestController
 @RequestMapping("/api/v1/categories")
 public class CategoryController {
@@ -26,8 +25,8 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @PostMapping
-    public Category createCategory(@RequestBody CreateCategoryRequestDto categoryRequestDto){
-        return categoryService.createCategory(categoryRequestDto); 
+    public Category createCategory(@RequestBody CreateCategoryRequestDto requestDto){
+        return categoryService.createCategory(requestDto); 
     }
 
     @GetMapping
