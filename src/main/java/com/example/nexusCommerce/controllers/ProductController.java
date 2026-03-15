@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
-import com.example.nexusCommerce.dtos.ProductResponseDto;
+import com.example.nexusCommerce.dtos.GetProductResponseDto;
+import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.services.ProductService;
 
@@ -31,7 +32,7 @@ public class ProductController {
                description="Fetches all the products from the catalogue."
     )
     @Tag(name="Get APIs")
-    public List<ProductResponseDto> getAllProducts(){
+    public List<GetProductResponseDto> getAllProducts(){
         return productServices.getAllProducts();
     }
 
@@ -40,8 +41,13 @@ public class ProductController {
     )
     @GetMapping("/{id}")
     @Tag(name="Get APIs")
-    public ProductResponseDto getProductById(@PathVariable Long id){
+    public GetProductResponseDto getProductById(@PathVariable Long id){
         return productServices.getProductById(id);
+    }
+
+    @GetMapping("/{id}/details")
+    public GetProductWithDetailsResponseDto getProductWithDetailsById(@PathVariable Long id){
+        return productServices.getProductWithDetailsById(id);
     }
 
     @Operation(summary="Post a new Product",
@@ -65,7 +71,7 @@ public class ProductController {
     @Operation(summary="Get Products with Category Name",
                description="Fetches all the products from that specified category"
     )
-    @GetMapping("search")
+    @GetMapping("/search")
     @Tag(name="Get APIs")
     public List<Product> findProductsByCategory(@RequestParam("categoryName") String category){
         return productServices.findByCategory(category);

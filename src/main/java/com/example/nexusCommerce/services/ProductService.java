@@ -1,13 +1,13 @@
 package com.example.nexusCommerce.services;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
-import com.example.nexusCommerce.dtos.ProductResponseDto;
-import com.example.nexusCommerce.exceptions.ProductNotFoundException;
-import com.example.nexusCommerce.mapper.ProductMapper;
+import com.example.nexusCommerce.dtos.GetProductResponseDto;
+import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
@@ -21,18 +21,48 @@ public class ProductService {
     private final CategoryService categoryService;
     private final ProductRepository productRepository;
 
-    public List<ProductResponseDto> getAllProducts() {
+    public List<GetProductResponseDto> getAllProducts() {
         return productRepository.findAll()
                                 .stream()
-                                .map(ProductMapper::toDto)
-                                .toList();
+                                .map(product -> GetProductResponseDto.builder()
+                                        .id(product.getId())
+                                        .title(product.getTitle())
+                                        .description(product.getDescription())
+                                        .price(product.getPrice())
+                                        .image(product.getImage())
+                                        .rating(product.getRating())
+                                        .build())
+                                    .collect(Collectors.toList()); 
     }
 
-    public ProductResponseDto getProductById(Long id){
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new ProductNotFoundException(id));
-        return ProductMapper.toDto(product);
+    public GetProductResponseDto getProductById(Long id){
+
+        return productRepository.findById(id)
+                .map(product -> GetProductResponseDto.builder()
+                    .id(product.getId())
+                    .title(product.getTitle())
+                    .description(product.getDescription())
+                    .price(product.getPrice())
+                    .image(product.getImage())
+                    .rating(product.getRating())
+                    .build())
+                .orElseThrow(() -> new RuntimeException("Product Not Found"));
+
     }
+
+    public GetProductWithDetailsResponseDto getProductWithDetailsById(Long id){
+        Product product = productRepository.findProductWithDetailsById(id).get(0);
+        return GetProductWithDetailsResponseDto.builder()
+                .id(product.getId())
+                .title(product.getTitle())
+                .description(product.getDescription())
+                .price(product.getPrice())
+                .image(product.getImage())
+                .rating(product.getRating())
+                .category(product.getCategory().getName())
+                .build();
+    }
+
     public Product createProduct(CreateProductRequestDto requestDto){
         Category newcategory = categoryService.getCategoryById(requestDto.getCategoryId());
 
