@@ -9,13 +9,16 @@ import com.example.nexusCommerce.dtos.ProductResponseDto;
 import com.example.nexusCommerce.exceptions.ProductNotFoundException;
 import com.example.nexusCommerce.mapper.ProductMapper;
 import com.example.nexusCommerce.repositories.ProductRepository;
+import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class ProductServices {
+public class ProductService {
+
+    private final CategoryService categoryService;
     private final ProductRepository productRepository;
 
     public List<ProductResponseDto> getAllProducts() {
@@ -31,9 +34,11 @@ public class ProductServices {
         return ProductMapper.toDto(product);
     }
     public Product createProduct(CreateProductRequestDto requestDto){
+        Category newcategory = categoryService.getCategoryById(requestDto.getCategoryId());
+
         Product newProduct = Product.builder()
                             .title(requestDto.getTitle())
-                            // .category(requestDto.getCategory())
+                            .category(newcategory)
                             .description(requestDto.getDescription())
                             .image(requestDto.getImage())
                             .price(requestDto.getPrice())

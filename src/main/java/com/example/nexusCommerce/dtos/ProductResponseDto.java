@@ -2,6 +2,8 @@ package com.example.nexusCommerce.dtos;
 
 import java.math.BigDecimal;
 
+import com.example.nexusCommerce.schema.Category;
+
 import lombok.Builder;
 import lombok.Data;
 
@@ -13,6 +15,6 @@ public class ProductResponseDto {
     private String description;
     private BigDecimal price;
     private String image;
-    private String category;
+    private Category category;
     private String rating;
 }

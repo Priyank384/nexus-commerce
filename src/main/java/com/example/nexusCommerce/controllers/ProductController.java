@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.ProductResponseDto;
 import com.example.nexusCommerce.schema.Product;
-import com.example.nexusCommerce.services.ProductServices;
+import com.example.nexusCommerce.services.ProductService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/products")
 @RequiredArgsConstructor
 public class ProductController {
-    private final ProductServices productServices;
+    private final ProductService productServices;
 
     @GetMapping()
     @Operation(summary="Get All Poducts",
