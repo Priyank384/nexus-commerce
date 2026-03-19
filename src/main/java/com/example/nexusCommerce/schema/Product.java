@@ -2,6 +2,9 @@ package com.example.nexusCommerce.schema;
 
 import java.math.BigDecimal;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -19,6 +22,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @Entity
 @Table(name = "products")
+@SQLDelete(sql = "UPDATE products SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
+@SQLRestriction("deleted_datetime is NULL")
 public class Product extends BaseEntity{
 
     @Column(nullable = false)

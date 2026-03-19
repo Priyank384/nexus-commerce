@@ -30,4 +30,7 @@ public class BaseEntity {
     @LastModifiedDate
     @Column(name="updated_datetime")
     private LocalDateTime updatedAt;
+
+    @Column(name="deleted_datetime")
+    private LocalDateTime deletedAt;
 }

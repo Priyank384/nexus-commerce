@@ -1,5 +1,8 @@
 package com.example.nexusCommerce.schema;
 
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.SQLRestriction;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -13,6 +16,8 @@ import lombok.NoArgsConstructor;
 @Builder
 @Entity
 @Table(name="orders")
+@SQLDelete(sql = "UPDATE orders SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
+@SQLRestriction("deleted_datetime is NULL")
 public class Order extends BaseEntity{
     
     private OrderStatus status;
