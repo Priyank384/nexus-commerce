@@ -27,7 +27,7 @@ import lombok.RequiredArgsConstructor;
 public class ProductController {
     private final ProductService productServices;
 
-    @GetMapping()
+    @GetMapping
     @Operation(summary="Get All Poducts",
                description="Fetches all the products from the catalogue."
     )
@@ -45,7 +45,12 @@ public class ProductController {
         return productServices.getProductById(id);
     }
 
+
+    @Operation(summary="Get Product with category",
+                description="Fetched the Product with other details like its category using specific ID."
+    )
     @GetMapping("/{id}/details")
+    @Tag(name="Get APIs")
     public GetProductWithDetailsResponseDto getProductWithDetailsById(@PathVariable Long id){
         return productServices.getProductWithDetailsById(id);
     }
