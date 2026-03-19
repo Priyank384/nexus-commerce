@@ -4,7 +4,7 @@ spring:
   application:
     name: NexusCommerce
   datasource:
-    url: jdbc:mysql://localhost:3306/fakecommerce
+    url: jdbc:mysql://localhost:3306/nexuscommerce
     username: ${username}
     password: ${password}
     driver-class-name: com.mysql.cj.jdbc.Driver
