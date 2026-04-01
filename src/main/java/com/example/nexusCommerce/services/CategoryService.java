@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
+import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
 import com.example.nexusCommerce.schema.Category;
 
@@ -31,7 +32,7 @@ public class CategoryService {
 
     public Category getCategoryById(Long id){
         return categoryRepository.findById(id)
-                                 .orElseThrow(() -> new RuntimeException("Category Not Found"));
+                                 .orElseThrow(() -> new ResourceNotFoundException("Category with id: " + id + " Not Found!"));
     }
 
     public void deleteCategory(Long id){
