@@ -10,9 +10,11 @@ import com.example.nexusCommerce.schema.Product;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long>{
-    List<Product> findByCategory(String category);
+    List<Product> findByCategory_NameIgnoreCase(String categoryName);
 
-    @Query(value = "SELECT DISTINCT p.category FROM products p", nativeQuery= true)
+    boolean existsByTitleIgnoreCase(String name);
+
+    @Query(value = "SELECT DISTINCT c.name FROM products p JOIN categories c ON p.category_id = c.id", nativeQuery = true)
     List<String> findUniqueCategory();
 
     @Query("select p from Product p JOIN FETCH p.category WHERE p.id = :id")

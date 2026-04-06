@@ -2,6 +2,8 @@ package com.example.nexusCommerce.controllers;
 
 import java.util.List;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -16,6 +18,7 @@ import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.services.ProductService;
+import com.example.nexusCommerce.utils.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,8 +35,9 @@ public class ProductController {
                description="Fetches all the products from the catalogue."
     )
     @Tag(name="Get APIs")
-    public List<GetProductResponseDto> getAllProducts(){
-        return productServices.getAllProducts();
+    public ResponseEntity<ApiResponse<List<GetProductResponseDto>>> getAllProducts(){
+        List<GetProductResponseDto> products = productServices.getAllProducts();
+        return ResponseEntity.ok(ApiResponse.success(products, "Products fetched successfully!"));
     }
 
     @Operation(summary="Get Product using specific Id",
@@ -41,8 +45,9 @@ public class ProductController {
     )
     @GetMapping("/{id}")
     @Tag(name="Get APIs")
-    public GetProductResponseDto getProductById(@PathVariable Long id){
-        return productServices.getProductById(id);
+    public ResponseEntity<ApiResponse<GetProductResponseDto>> getProductById(@PathVariable Long id){
+        GetProductResponseDto product = productServices.getProductById(id);
+        return ResponseEntity.ok(ApiResponse.success(product, "Product fetched successfully!"));
     }
 
 
@@ -51,8 +56,9 @@ public class ProductController {
     )
     @GetMapping("/{id}/details")
     @Tag(name="Get APIs")
-    public GetProductWithDetailsResponseDto getProductWithDetailsById(@PathVariable Long id){
-        return productServices.getProductWithDetailsById(id);
+    public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductWithDetailsById(@PathVariable Long id){
+        GetProductWithDetailsResponseDto product = productServices.getProductWithDetailsById(id);
+        return ResponseEntity.ok(ApiResponse.success(product, "Product details fetched successfully!"));
     }
 
     @Operation(summary="Post a new Product",
@@ -60,8 +66,11 @@ public class ProductController {
     )
     @PostMapping
     @Tag(name="Post APIs")
-    public Product createProduct(@RequestBody CreateProductRequestDto requestDto){
-        return productServices.createProduct(requestDto);
+    public ResponseEntity<ApiResponse<Product>> createProduct(@RequestBody CreateProductRequestDto requestDto){
+        Product product = productServices.createProduct(requestDto);
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.success(product, "Product created successfully!"));
     }
 
     @Operation(summary="Delete a Product with specific ID",
@@ -69,8 +78,9 @@ public class ProductController {
     )
     @DeleteMapping("/{id}")
     @Tag(name="Delete APIs")
-    public void deleteProduct(@PathVariable Long id){
+    public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable Long id){
         productServices.deleteProduct(id);
+        return ResponseEntity.ok(ApiResponse.success(null, "Product deleted successfully!"));
     }
 
     @Operation(summary="Get Products with Category Name",
@@ -78,8 +88,9 @@ public class ProductController {
     )
     @GetMapping("/search")
     @Tag(name="Get APIs")
-    public List<Product> findProductsByCategory(@RequestParam("categoryName") String category){
-        return productServices.findByCategory(category);
+    public ResponseEntity<ApiResponse<List<Product>>> findProductsByCategory(@RequestParam("categoryName") String category){
+        List<Product> products = productServices.findByCategory(category);
+        return ResponseEntity.ok(ApiResponse.success(products, "Products fetched by category successfully!"));
     }
 
     // Task: Write an API to get all the unique categories
@@ -89,7 +100,8 @@ public class ProductController {
     )
     @GetMapping("/uniqueCategories")
     @Tag(name="Get APIs")
-    public List<String> getUniqueCategories(){
-        return productServices.getUniqueCategories();
+    public ResponseEntity<ApiResponse<List<String>>> getUniqueCategories(){
+        List<String> categories = productServices.getUniqueCategories();
+        return ResponseEntity.ok(ApiResponse.success(categories, "Unique categories fetched successfully!"));
     }
 }
