@@ -59,7 +59,7 @@ public class OrderService {
                 OrderProducts orderProducts = OrderProducts.builder()
                                                 .order(order)
                                                 .product(product)
-                                                .quantity(itemDto.getQantity())
+                                                .quantity(itemDto.getQantity()!= null ? itemDto.getQantity() : 1)
                                                 .build();
                 
                 orderProductsRepository.save(orderProducts);
