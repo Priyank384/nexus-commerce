@@ -1,6 +1,10 @@
 package com.example.nexusCommerce.services;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
@@ -16,6 +20,7 @@ import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -44,27 +49,42 @@ public class OrderService {
         orderRepository.delete(order);
     }
 
-    public void createOrder(CreateOrderRequestDto createOrderRequestDto){
+    @Transactional
+    public GetOrderResponseDto createOrder(CreateOrderRequestDto createOrderRequestDto){
         Order order = Order.builder()
                         .status(OrderStatus.PENDING)
                         .build();
 
         orderRepository.save(order);
 
-        if(createOrderRequestDto.getOrderItems() != null){
-            for(var itemDto : createOrderRequestDto.getOrderItems()){
-                Product product = productRepository.findById(itemDto.getProductId())
-                                    .orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + itemDto.getProductId()));
+        if(createOrderRequestDto.getOrderItems()!= null){
+            List<Long> productIds = createOrderRequestDto.getOrderItems().stream()
+                                        .map(item -> item.getProductId()).collect(Collectors.toList());
+                                        
+            List<Product> products = productRepository.findAllById(productIds);
 
-                OrderProducts orderProducts = OrderProducts.builder()
-                                                .order(order)
-                                                .product(product)
-                                                .quantity(itemDto.getQantity()!= null ? itemDto.getQantity() : 1)
-                                                .build();
-                
-                orderProductsRepository.save(orderProducts);
+            Map<Long, Product> productMap = products.stream()
+                                                .collect(Collectors.toMap(Product::getId, Function.identity()));
+
+            for(Long id: productIds){
+                if(!productMap.containsKey(id)){
+                    throw new ResourceNotFoundException("Product not found with id: " + id);
+                }
             }
+
+            List<OrderProducts> orderProducts = new ArrayList<>();
+            for(var itemDto : createOrderRequestDto.getOrderItems()){
+                Product product = productMap.get(itemDto.getProductId());
+                orderProducts.add(OrderProducts.builder()
+                                    .order(order)
+                                    .product(product)
+                                    .quantity(itemDto.getQantity() != null ? itemDto.getQantity() : 1)
+                                    .build());
+            }
+            orderProductsRepository.saveAll(orderProducts);
         }
+
+        return orderAdapter.mapToGetOrderResponseDto(order);
     }
 
 }
