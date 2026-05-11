@@ -1,10 +1,10 @@
 package com.example.nexusCommerce.services;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -12,14 +12,15 @@ import org.springframework.stereotype.Service;
 import com.example.nexusCommerce.adapters.OrderAdapter;
 import com.example.nexusCommerce.dtos.CreateOrderRequestDto;
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
+import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
 import com.example.nexusCommerce.dtos.OrderItemActionDto;
+import com.example.nexusCommerce.dtos.OrderItemResponseDto;
 import com.example.nexusCommerce.dtos.updateOrderRequestDto;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Order;
-import com.example.nexusCommerce.schema.OrderItemAction;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
@@ -170,7 +171,7 @@ public class OrderService {
                     }
                 }
             }
-            
+
             if(!toSave.isEmpty()){
                 orderProductsRepository.saveAll(toSave);
             }
@@ -180,6 +181,30 @@ public class OrderService {
         }
 
         return orderAdapter.mapToGetOrderResponseDto(order);
+    }
+
+    public GetOrderSummaryResponseDto getOrderSummary(Long id){
+        Order order = orderRepository.findById(id).orElseThrow(()-> new ResourceNotFoundException("Order not found with id: " + id));
+        
+        List<OrderProducts> orderProducts = orderProductsRepository.findByOrderWithProduct(order);
+
+        List<OrderItemResponseDto> items = orderAdapter.mapToOrderItemResponseDto(orderProducts);
+
+        int totalItems = orderProducts.stream().mapToInt(OrderProducts::getQuantity).sum();
+
+        BigDecimal totalPrice = orderProducts.stream()
+                                .map(op->op.getProduct().getPrice().multiply(BigDecimal.valueOf(op.getId())))
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return GetOrderSummaryResponseDto.builder()
+                .id(order.getId())
+                .status(order.getStatus())
+                .items(items)
+                .totalItems(totalItems)
+                .totalPrice(totalPrice)
+                .createdAt(order.getCreatedAt())
+                .updatedAt(order.getUpdatedAt())
+                .build();
     }
 
 }
