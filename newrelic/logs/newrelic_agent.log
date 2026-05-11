@@ -76,3 +76,78 @@
 2026-05-12T02:14:47,470+0530 [26058 55] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
 2026-05-12T02:14:47,470+0530 [26058 55] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
 2026-05-12T02:14:47,472+0530 [26058 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-05-12T02:35:31,934+0530 [26058 83] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (com.newrelic.agent.transport.HostConnectException: Connect to collector.newrelic.com:443 [collector.newrelic.com/162.247.243.32] failed: Operation timed out). Please check your network / proxy settings.
+2026-05-12T03:29:51,574+0530 [26058 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down
+2026-05-12T03:30:01,205+0530 [34523 1] com.newrelic INFO: Writing to New Relic log file: /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/logs/newrelic_agent.log
+2026-05-12T03:30:01,206+0530 [34523 1] com.newrelic INFO: JRE vendor Homebrew version 21.0.10
+2026-05-12T03:30:01,206+0530 [34523 1] com.newrelic INFO: JVM vendor Homebrew OpenJDK 64-Bit Server VM version 21.0.10
+2026-05-12T03:30:01,206+0530 [34523 1] com.newrelic INFO: OS Mac OS X version 26.4.1 arch aarch64
+2026-05-12T03:30:01,206+0530 [34523 1] com.newrelic INFO: Agent Host: Priyanks-MacBook-Air.local IP: 127.0.0.1
+2026-05-12T03:30:01,206+0530 [34523 1] com.newrelic INFO: New Relic Agent v9.2.0 is initializing...
+2026-05-12T03:30:01,216+0530 [34523 1] com.newrelic INFO: AgentCollectionFactory: Using Caffeine 3.x for Java 21
+2026-05-12T03:30:01,660+0530 [34523 31] com.newrelic INFO: Instrumentation com.newrelic.instrumentation.jdbc-resultset is disabled. Skipping.
+2026-05-12T03:30:02,434+0530 [34523 1] com.newrelic INFO: Started Adaptive Sampler with sampling target 120 and report period 60 seconds.
+2026-05-12T03:30:02,434+0530 [34523 1] com.newrelic INFO: The full granularity root sampler was configured to use the adaptive sampler type.
+2026-05-12T03:30:02,434+0530 [34523 1] com.newrelic INFO: The full granularity remote_parent_sampled sampler was configured to use the adaptive sampler type.
+2026-05-12T03:30:02,435+0530 [34523 1] com.newrelic INFO: The full granularity remote_parent_not_sampled sampler was configured to use the adaptive sampler type.
+2026-05-12T03:30:02,437+0530 [34523 1] com.newrelic.agent.RPMServiceManagerImpl INFO: Configured to connect to New Relic at collector.newrelic.com:443
+2026-05-12T03:30:02,612+0530 [34523 1] com.newrelic INFO: Setting audit_mode to false
+2026-05-12T03:30:02,709+0530 [34523 1] com.newrelic.agent.config.ConfigServiceImpl INFO: Configuration file is /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/./newrelic.yml
+2026-05-12T03:30:02,712+0530 [34523 1] com.newrelic INFO: New Relic Agent v9.2.0 has started
+2026-05-12T03:30:02,712+0530 [34523 1] com.newrelic INFO: Agent class loader: com.newrelic.bootstrap.BootstrapAgent$JVMAgentClassLoader@8807e25
+2026-05-12T03:30:02,713+0530 [34523 1] com.newrelic INFO: Premain startup complete in 2,164ms
+2026-05-12T03:30:02,714+0530 [34523 1] com.newrelic INFO: New Relic Security is completely disabled by one of the user provided config `security.enabled`, `security.agent.enabled` or `high_security`. Not loading security capabilities.
+2026-05-12T03:30:05,495+0530 [34523 59] com.newrelic INFO: Server Info: Apache Tomcat/11.0.15
+2026-05-12T03:30:12,740+0530 [34523 55] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-05-12T03:30:12,747+0530 [34523 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-05-12T03:30:14,507+0530 [34523 55] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-05-12T03:30:15,999+0530 [34523 55] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-05-12T03:30:15,999+0530 [34523 55] com.newrelic INFO: Agent run id: BcUrVpeLBOWEAHoC5TlpdwNqAlHYAAIBAAAnIQEAAIbbAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-05-12T03:30:16,001+0530 [34523 55] com.newrelic INFO: Agent 34523@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-05-12T03:30:16,004+0530 [34523 55] com.newrelic INFO: Reporting to: https://rpm.newrelic.com/accounts/7996133/applications/963210487
+2026-05-12T03:30:16,014+0530 [34523 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-05-12T03:30:16,014+0530 [34523 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-05-12T03:30:16,014+0530 [34523 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-05-12T03:30:16,018+0530 [34523 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-05-12T03:30:16,018+0530 [34523 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-05-12T03:30:16,018+0530 [34523 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-05-12T03:30:16,732+0530 [34523 55] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-05-12T03:30:16,733+0530 [34523 55] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-05-12T03:30:16,736+0530 [34523 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-05-12T03:37:18,111+0530 [34523 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down
+2026-05-12T03:37:26,292+0530 [35681 1] com.newrelic INFO: Writing to New Relic log file: /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/logs/newrelic_agent.log
+2026-05-12T03:37:26,293+0530 [35681 1] com.newrelic INFO: JRE vendor Homebrew version 21.0.10
+2026-05-12T03:37:26,293+0530 [35681 1] com.newrelic INFO: JVM vendor Homebrew OpenJDK 64-Bit Server VM version 21.0.10
+2026-05-12T03:37:26,293+0530 [35681 1] com.newrelic INFO: OS Mac OS X version 26.4.1 arch aarch64
+2026-05-12T03:37:26,293+0530 [35681 1] com.newrelic INFO: Agent Host: Priyanks-MacBook-Air.local IP: 127.0.0.1
+2026-05-12T03:37:26,293+0530 [35681 1] com.newrelic INFO: New Relic Agent v9.2.0 is initializing...
+2026-05-12T03:37:26,308+0530 [35681 1] com.newrelic INFO: AgentCollectionFactory: Using Caffeine 3.x for Java 21
+2026-05-12T03:37:26,954+0530 [35681 31] com.newrelic INFO: Instrumentation com.newrelic.instrumentation.jdbc-resultset is disabled. Skipping.
+2026-05-12T03:37:28,753+0530 [35681 1] com.newrelic INFO: Started Adaptive Sampler with sampling target 120 and report period 60 seconds.
+2026-05-12T03:37:28,755+0530 [35681 1] com.newrelic INFO: The full granularity root sampler was configured to use the adaptive sampler type.
+2026-05-12T03:37:28,755+0530 [35681 1] com.newrelic INFO: The full granularity remote_parent_sampled sampler was configured to use the adaptive sampler type.
+2026-05-12T03:37:28,756+0530 [35681 1] com.newrelic INFO: The full granularity remote_parent_not_sampled sampler was configured to use the adaptive sampler type.
+2026-05-12T03:37:28,759+0530 [35681 1] com.newrelic.agent.RPMServiceManagerImpl INFO: Configured to connect to New Relic at collector.newrelic.com:443
+2026-05-12T03:37:28,982+0530 [35681 1] com.newrelic INFO: Setting audit_mode to false
+2026-05-12T03:37:29,102+0530 [35681 1] com.newrelic.agent.config.ConfigServiceImpl INFO: Configuration file is /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/./newrelic.yml
+2026-05-12T03:37:29,106+0530 [35681 1] com.newrelic INFO: New Relic Agent v9.2.0 has started
+2026-05-12T03:37:29,106+0530 [35681 1] com.newrelic INFO: Agent class loader: com.newrelic.bootstrap.BootstrapAgent$JVMAgentClassLoader@8807e25
+2026-05-12T03:37:29,106+0530 [35681 1] com.newrelic INFO: Premain startup complete in 3,486ms
+2026-05-12T03:37:29,107+0530 [35681 1] com.newrelic INFO: New Relic Security is completely disabled by one of the user provided config `security.enabled`, `security.agent.enabled` or `high_security`. Not loading security capabilities.
+2026-05-12T03:37:32,395+0530 [35681 59] com.newrelic INFO: Server Info: Apache Tomcat/11.0.15
+2026-05-12T03:37:39,134+0530 [35681 55] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-05-12T03:37:39,139+0530 [35681 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-05-12T03:37:42,148+0530 [35681 55] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-05-12T03:37:45,647+0530 [35681 55] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-05-12T03:37:45,649+0530 [35681 55] com.newrelic INFO: Agent run id: BW1CQwm2s_TCAHoC5TlpdwNqAlN8AAIBAAAnIQEAAIthAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-05-12T03:37:45,658+0530 [35681 55] com.newrelic INFO: Agent 35681@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-05-12T03:37:45,660+0530 [35681 55] com.newrelic INFO: Reporting to: https://rpm.newrelic.com/accounts/7996133/applications/963210487
+2026-05-12T03:37:45,678+0530 [35681 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-05-12T03:37:45,679+0530 [35681 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-05-12T03:37:45,679+0530 [35681 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-05-12T03:37:45,684+0530 [35681 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-05-12T03:37:45,685+0530 [35681 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-05-12T03:37:45,685+0530 [35681 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-05-12T03:37:46,688+0530 [35681 55] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-05-12T03:37:46,689+0530 [35681 55] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-05-12T03:37:46,691+0530 [35681 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
