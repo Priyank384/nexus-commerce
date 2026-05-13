@@ -8,6 +8,7 @@ import org.hibernate.annotations.SQLRestriction;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
@@ -21,6 +22,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 @Entity
+// @Table(name = "products", indexes ={
+//     @Index(name ="idx_product_price", columnList = "price"),
+//     @Index(name = "idx_product_price_rating", columnList="price,rating")
+
+// })
 @Table(name = "products")
 @SQLDelete(sql = "UPDATE products SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
 @SQLRestriction("deleted_datetime is NULL")
