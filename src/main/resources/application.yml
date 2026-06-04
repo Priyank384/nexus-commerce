@@ -18,5 +18,8 @@ spring:
   environment:
     profile:
       active: dev
+  redis:
+    host: localhost
+    port: ${redis_port}
 server:
   port: ${PORT}

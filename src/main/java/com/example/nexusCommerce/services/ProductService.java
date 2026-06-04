@@ -2,6 +2,7 @@ package com.example.nexusCommerce.services;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.services.cache.ProductRedisCache;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,6 +26,7 @@ public class ProductService {
 
     private final CategoryService categoryService;
     private final ProductRepository productRepository;
+    private final ProductRedisCache productRedisCache;
 
     public List<GetProductResponseDto> getAllProducts() {
         return productRepository.findAll()
@@ -33,9 +36,18 @@ public class ProductService {
     }
 
     public GetProductResponseDto getProductById(Long id){
-        return productRepository.findById(id)
+
+        Optional<GetProductResponseDto> cachedSummary = productRedisCache.getSummary(id);
+        if(cachedSummary.isPresent()){
+            return cachedSummary.get();
+        }
+        
+        GetProductResponseDto response =  productRepository.findById(id)
                 .map(this::toGetProductResponseDto)
                 .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
+
+        productRedisCache.putSummary(id, response);
+        return response;
     }
 
     public GetProductWithDetailsResponseDto getProductWithDetailsById(Long id){
