@@ -29,10 +29,18 @@ public class ProductService {
     private final ProductRedisCache productRedisCache;
 
     public List<GetProductResponseDto> getAllProducts() {
-        return productRepository.findAll()
-                                .stream()
-                                .map(this::toGetProductResponseDto)
-                                    .collect(Collectors.toList()); 
+        Optional<List<GetProductResponseDto>> cached = productRedisCache.getAllSummaries();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<GetProductResponseDto> products = productRepository.findAll()
+                .stream()
+                .map(this::toGetProductResponseDto)
+                .collect(Collectors.toList());
+
+        productRedisCache.putAllSummaries(products);
+        return products;
     }
 
     public GetProductResponseDto getProductById(Long id){
@@ -51,11 +59,17 @@ public class ProductService {
     }
 
     public GetProductWithDetailsResponseDto getProductWithDetailsById(Long id){
+        Optional<GetProductWithDetailsResponseDto> cached = productRedisCache.getDetails(id);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
         Product product = productRepository.findProductWithDetailsById(id)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
-        return GetProductWithDetailsResponseDto.builder()
+
+        GetProductWithDetailsResponseDto response = GetProductWithDetailsResponseDto.builder()
                 .id(product.getId())
                 .title(product.getTitle())
                 .description(product.getDescription())
@@ -64,6 +78,9 @@ public class ProductService {
                 .rating(product.getRating())
                 .category(product.getCategory().getName())
                 .build();
+
+        productRedisCache.putDetails(id, response);
+        return response;
     }
 
     public Product createProduct(CreateProductRequestDto requestDto){
@@ -94,14 +111,31 @@ public class ProductService {
         if (category == null || category.isBlank()) {
             throw new InvalidRequestException("Category name must not be blank!");
         }
-        return productRepository.findByCategory_NameIgnoreCase(category.trim());
+        String normalizedCategory = category.trim();
+
+        Optional<List<Product>> cached = productRedisCache.getByCategory(normalizedCategory);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<Product> products = productRepository.findByCategory_NameIgnoreCase(normalizedCategory);
+        productRedisCache.putByCategory(normalizedCategory, products);
+        return products;
     }
 
     public List<String> getUniqueCategories() {
-        return productRepository.findUniqueCategory()
+        Optional<List<String>> cached = productRedisCache.getUniqueCategories();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<String> categories = productRepository.findUniqueCategory()
                 .stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
+
+        productRedisCache.putUniqueCategories(categories);
+        return categories;
     }
 
     private GetProductResponseDto toGetProductResponseDto(Product product) {

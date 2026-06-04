@@ -1,5 +1,7 @@
 # NexusCommerce
 
+> **Full project guide:** [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) — setup, tech stack, architecture, API flows, payloads, Redis keys, real-life scenarios, and testing checklists.
+
 NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: **categories**, **products**, **orders** (with line items), and **reviews** tied to both an order and a product. It uses **MySQL**, **Flyway** for schema migrations, **JPA/Hibernate** with `ddl-auto: validate`, and **springdoc-openapi** for interactive API docs.
 
 ---
@@ -28,6 +30,7 @@ NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: *
 | Migrations | **Flyway** (MySQL support) |
 | API docs | **springdoc-openapi** 2.8.x (Swagger UI) |
 | Build | **Gradle** |
+| Cache | **Redis** (read-through on GET; see [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#8-redis-caching)) |
 | APM / monitoring | **New Relic** Java agent (see [Observability and monitoring](#observability-and-monitoring)) |
 
 ---
@@ -102,7 +105,9 @@ If you do not use `.env`, set the same properties via environment variables or a
    ./gradlew bootRun
    ```
 
-   On first startup, **Flyway** creates and updates tables (`V1`–`V3` migrations, including `reviews`).
+   On first startup, **Flyway** creates and updates tables (`V1`–`V4` migrations, including `reviews`).
+
+   **Redis** must be running on the host/port in `.env` (`redis_port`, default `6379`).
 
 4. **Run tests** (when you add or extend them):
 

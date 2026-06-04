@@ -2,6 +2,7 @@ package com.example.nexusCommerce.services;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -18,6 +19,7 @@ import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Review;
+import com.example.nexusCommerce.services.cache.ReviewRedisCache;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -31,16 +33,30 @@ public class ReviewService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final OrderProductsRepository orderProductsRepository;
+    private final ReviewRedisCache reviewRedisCache;
 
     public List<GetReviewResponseDto> getAllReviews() {
-        List<Review> reviews = reviewRepository.findAll();
-        return reviewAdapter.mapToGetReviewResponseDtoList(reviews);
+        Optional<List<GetReviewResponseDto>> cached = reviewRedisCache.getAll();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<GetReviewResponseDto> reviews = reviewAdapter.mapToGetReviewResponseDtoList(reviewRepository.findAll());
+        reviewRedisCache.putAll(reviews);
+        return reviews;
     }
 
     public GetReviewResponseDto getReviewById(Long id) {
+        Optional<GetReviewResponseDto> cached = reviewRedisCache.getById(id);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
         Review review = reviewRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Review not found with id: " + id));
-        return reviewAdapter.mapToGetReviewResponseDto(review);
+        GetReviewResponseDto response = reviewAdapter.mapToGetReviewResponseDto(review);
+        reviewRedisCache.putById(id, response);
+        return response;
     }
 
     public void deleteReview(Long id) {
@@ -50,13 +66,27 @@ public class ReviewService {
     }
 
     public List<GetReviewResponseDto> getReviewsByProductId(Long productId) {
-        List<Review> reviews = reviewRepository.findByProductId(productId);
-        return reviewAdapter.mapToGetReviewResponseDtoList(reviews);
+        Optional<List<GetReviewResponseDto>> cached = reviewRedisCache.getByProductId(productId);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<GetReviewResponseDto> reviews = reviewAdapter.mapToGetReviewResponseDtoList(
+                reviewRepository.findByProductId(productId));
+        reviewRedisCache.putByProductId(productId, reviews);
+        return reviews;
     }
 
     public List<GetReviewResponseDto> getReviewsByOrderId(Long orderId) {
-        List<Review> reviews = reviewRepository.findByOrderId(orderId);
-        return reviewAdapter.mapToGetReviewResponseDtoList(reviews);
+        Optional<List<GetReviewResponseDto>> cached = reviewRedisCache.getByOrderId(orderId);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<GetReviewResponseDto> reviews = reviewAdapter.mapToGetReviewResponseDtoList(
+                reviewRepository.findByOrderId(orderId));
+        reviewRedisCache.putByOrderId(orderId, reviews);
+        return reviews;
     }
 
     @Transactional

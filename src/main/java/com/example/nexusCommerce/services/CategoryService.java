@@ -1,6 +1,7 @@
 package com.example.nexusCommerce.services;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
@@ -10,6 +11,7 @@ import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
 import com.example.nexusCommerce.schema.Category;
+import com.example.nexusCommerce.services.cache.CategoryRedisCache;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,6 +22,7 @@ import lombok.Data;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final CategoryRedisCache categoryRedisCache;
 
     public Category createCategory(CreateCategoryRequestDto requestDto){
         String normalizedName = validateAndNormalizeCategoryName(requestDto);
@@ -33,12 +36,26 @@ public class CategoryService {
     }
 
     public List<Category> getAllCategory(){
-        return categoryRepository.findAll();
+        Optional<List<Category>> cached = categoryRedisCache.getAll();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<Category> categories = categoryRepository.findAll();
+        categoryRedisCache.putAll(categories);
+        return categories;
     }
 
     public Category getCategoryById(Long id){
-        return categoryRepository.findById(id)
-                                 .orElseThrow(() -> new ResourceNotFoundException("Category with id: " + id + " Not Found!"));
+        Optional<Category> cached = categoryRedisCache.getById(id);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Category with id: " + id + " Not Found!"));
+        categoryRedisCache.putById(id, category);
+        return category;
     }
 
     public void deleteCategory(Long id){

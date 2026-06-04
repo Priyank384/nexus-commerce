@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,7 @@ import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.services.cache.OrderRedisCache;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -36,16 +38,30 @@ public class OrderService {
     private final OrderProductsRepository orderProductsRepository;
     private final OrderAdapter orderAdapter;
     private final ProductRepository productRepository;
+    private final OrderRedisCache orderRedisCache;
     
     public List<GetOrderResponseDto> getAllOrders(){
-        List<Order> orders = orderRepository.findAll();
-        return orderAdapter.mapToGetOrderResponseDtoList(orders);
+        Optional<List<GetOrderResponseDto>> cached = orderRedisCache.getAll();
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        List<GetOrderResponseDto> orders = orderAdapter.mapToGetOrderResponseDtoList(orderRepository.findAll());
+        orderRedisCache.putAll(orders);
+        return orders;
     }
 
     public GetOrderResponseDto getOrderById(Long id){
+        Optional<GetOrderResponseDto> cached = orderRedisCache.getById(id);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
         Order order = orderRepository.findById(id)
                         .orElseThrow(() -> new ResourceNotFoundException("Order with id: " + id + " not found"));
-        return orderAdapter.mapToGetOrderResponseDto(order);
+        GetOrderResponseDto response = orderAdapter.mapToGetOrderResponseDto(order);
+        orderRedisCache.putById(id, response);
+        return response;
     }
 
     public void deleteOrder(Long id){
@@ -185,6 +201,11 @@ public class OrderService {
     }
 
     public GetOrderSummaryResponseDto getOrderSummary(Long id){
+        Optional<GetOrderSummaryResponseDto> cached = orderRedisCache.getSummary(id);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
         Order order = orderRepository.findById(id).orElseThrow(()-> new ResourceNotFoundException("Order not found with id: " + id));
         
         List<OrderProducts> orderProducts = orderProductsRepository.findByOrderWithProduct(order);
@@ -197,7 +218,7 @@ public class OrderService {
                                 .map(op->op.getProduct().getPrice().multiply(BigDecimal.valueOf(op.getId())))
                                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return GetOrderSummaryResponseDto.builder()
+        GetOrderSummaryResponseDto summary = GetOrderSummaryResponseDto.builder()
                 .id(order.getId())
                 .status(order.getStatus())
                 .items(items)
@@ -206,6 +227,9 @@ public class OrderService {
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();
+
+        orderRedisCache.putSummary(id, summary);
+        return summary;
     }
 
 }
