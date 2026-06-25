@@ -998,3 +998,545 @@
 2026-06-05T00:16:18,314+0530 [9474 55] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
 2026-06-05T00:16:18,315+0530 [9474 55] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
 2026-06-05T00:16:18,317+0530 [9474 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-05T01:48:34,701+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T04:22:58,256+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T04:38:44,882+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-05T04:38:44,887+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known
+2026-06-05T04:38:45,315+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-05T06:18:20,021+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-05T07:42:48,909+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-05T12:06:04,226+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-05T13:23:22,658+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T15:25:30,550+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T16:58:28,018+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T17:18:08,248+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-05T19:29:10,569+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-05T20:04:44,049+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-05T21:50:57,965+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-05T23:07:30,501+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-06T04:03:20,043+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-06T04:03:20,049+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-06T04:03:30,580+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-06T04:03:30,669+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T04:03:30,700+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T04:03:30,810+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T04:03:30,810+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-06T04:03:43,171+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-06T09:37:52,766+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-06T13:54:59,159+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-06T13:54:59,161+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-06T13:54:59,165+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-06T13:54:59,168+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T13:54:59,169+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T13:54:59,183+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T13:54:59,184+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-06T15:26:42,647+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-06T15:26:45,779+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-06T16:26:54,061+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-06T17:43:33,486+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-06T19:01:58,121+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-06T20:30:59,102+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-06T20:51:49,306+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T20:51:49,306+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-06T20:51:49,318+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-06T20:51:49,318+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-06T22:31:37,589+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-06T22:31:39,568+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-06T23:49:47,192+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T00:03:14,533+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-07T00:03:14,538+0530 [9474 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-07T00:03:15,632+0530 [9474 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-07T00:03:15,640+0530 [9474 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-07T00:03:17,072+0530 [9474 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-07T00:03:18,869+0530 [9474 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-07T00:03:18,870+0530 [9474 84] com.newrelic INFO: Agent run id: BfI_3PnA9cqrAHoC5TlpdwNqJGhUAAIBAAAnIQEAACUCAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-07T00:03:18,877+0530 [9474 84] com.newrelic INFO: Agent 9474@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-07T00:03:18,877+0530 [9474 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-07T00:03:18,895+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-07T00:03:18,896+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-07T00:03:18,896+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-07T00:03:18,928+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-07T00:03:18,929+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-07T00:03:18,929+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-07T00:03:19,014+0530 [9474 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-07T00:03:19,019+0530 [9474 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-07T02:26:05,756+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T02:57:14,476+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-07T06:16:14,716+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T11:38:28,581+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-07T13:07:03,602+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T16:39:49,294+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-07T16:39:49,299+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-07T16:55:43,909+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-07T16:55:43,900+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-07T16:55:43,948+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-07T16:55:43,963+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-07T16:55:43,963+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-07T18:51:57,341+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T18:51:59,470+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-07T20:02:28,865+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-07T22:37:16,144+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-07T22:37:20,313+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-07T22:37:20,314+0530 [9474 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-07T22:37:21,528+0530 [9474 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-07T22:37:21,546+0530 [9474 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-07T22:37:23,405+0530 [9474 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-07T22:37:26,211+0530 [9474 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-07T22:37:26,212+0530 [9474 84] com.newrelic INFO: Agent run id: BcVtISvuN01-AHoC5TlpdwNqJaWsAAIBAAAnIQEAACUCAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-07T22:37:26,215+0530 [9474 84] com.newrelic INFO: Agent 9474@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-07T22:37:26,216+0530 [9474 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-07T22:37:26,218+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-07T22:37:26,218+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-07T22:37:26,218+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-07T22:37:26,234+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-07T22:37:26,235+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-07T22:37:26,235+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-07T22:37:26,262+0530 [9474 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-07T22:37:26,262+0530 [9474 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-08T02:29:42,485+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T03:05:38,016+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-08T09:28:03,502+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-08T09:28:03,507+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-08T09:28:03,511+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-08T09:28:03,513+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-08T09:28:03,514+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-08T09:28:03,525+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-08T09:28:03,525+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-08T11:34:45,951+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T11:34:48,261+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-08T12:55:04,122+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T15:43:32,904+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T16:36:06,749+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-08T16:36:06,773+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-08T16:36:06,774+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-08T16:36:07,125+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-08T18:49:21,165+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T18:49:24,318+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-08T20:06:37,841+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-08T21:48:37,997+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-09T00:16:54,619+0530 [9474 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-09T06:46:11,471+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-09T12:44:43,176+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-09T18:51:28,662+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-09T19:08:13,267+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-09T19:08:13,297+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-09T19:08:13,347+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-09T19:08:13,349+0530 [9474 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-09T19:08:13,522+0530 [9474 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-09T19:08:13,695+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-09T19:08:13,695+0530 [9474 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-09T21:38:26,359+0530 [9474 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-09T21:38:27,676+0530 [9474 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-09T21:38:42,469+0530 [9474 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-09T21:38:42,504+0530 [9474 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-09T21:38:43,724+0530 [9474 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-09T21:38:43,733+0530 [9474 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-09T21:38:45,119+0530 [9474 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-09T21:38:46,629+0530 [9474 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-09T21:38:46,631+0530 [9474 84] com.newrelic INFO: Agent run id: BbATF6GU5Ao3AHoC5TlpdwNqKDrYAAIBAAAnIQEAACUCAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-09T21:38:46,634+0530 [9474 84] com.newrelic INFO: Agent 9474@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-09T21:38:46,635+0530 [9474 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-09T21:38:46,643+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-09T21:38:46,644+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-09T21:38:46,644+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-09T21:38:46,667+0530 [9474 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-09T21:38:46,668+0530 [9474 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-09T21:38:46,668+0530 [9474 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-09T21:38:46,758+0530 [9474 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-09T21:38:46,760+0530 [9474 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-09T22:12:53,846+0530 [9474 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down
+2026-06-11T19:51:53,290+0530 [17468 1] com.newrelic INFO: Writing to New Relic log file: /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/logs/newrelic_agent.log
+2026-06-11T19:51:53,290+0530 [17468 1] com.newrelic INFO: JRE vendor Homebrew version 21.0.10
+2026-06-11T19:51:53,290+0530 [17468 1] com.newrelic INFO: JVM vendor Homebrew OpenJDK 64-Bit Server VM version 21.0.10
+2026-06-11T19:51:53,290+0530 [17468 1] com.newrelic INFO: OS Mac OS X version 26.5.1 arch aarch64
+2026-06-11T19:51:53,291+0530 [17468 1] com.newrelic INFO: Agent Host: Priyanks-MacBook-Air.local IP: 127.0.0.1
+2026-06-11T19:51:53,291+0530 [17468 1] com.newrelic INFO: New Relic Agent v9.2.0 is initializing...
+2026-06-11T19:51:53,298+0530 [17468 1] com.newrelic INFO: AgentCollectionFactory: Using Caffeine 3.x for Java 21
+2026-06-11T19:51:53,597+0530 [17468 31] com.newrelic INFO: Instrumentation com.newrelic.instrumentation.jdbc-resultset is disabled. Skipping.
+2026-06-11T19:51:54,145+0530 [17468 1] com.newrelic INFO: Started Adaptive Sampler with sampling target 120 and report period 60 seconds.
+2026-06-11T19:51:54,146+0530 [17468 1] com.newrelic INFO: The full granularity root sampler was configured to use the adaptive sampler type.
+2026-06-11T19:51:54,146+0530 [17468 1] com.newrelic INFO: The full granularity remote_parent_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:51:54,146+0530 [17468 1] com.newrelic INFO: The full granularity remote_parent_not_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:51:54,147+0530 [17468 1] com.newrelic.agent.RPMServiceManagerImpl INFO: Configured to connect to New Relic at collector.newrelic.com:443
+2026-06-11T19:51:54,279+0530 [17468 1] com.newrelic INFO: Setting audit_mode to false
+2026-06-11T19:51:54,339+0530 [17468 1] com.newrelic.agent.config.ConfigServiceImpl INFO: Configuration file is /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/./newrelic.yml
+2026-06-11T19:51:54,341+0530 [17468 1] com.newrelic INFO: New Relic Agent v9.2.0 has started
+2026-06-11T19:51:54,341+0530 [17468 1] com.newrelic INFO: Agent class loader: com.newrelic.bootstrap.BootstrapAgent$JVMAgentClassLoader@33e5ccce
+2026-06-11T19:51:54,342+0530 [17468 1] com.newrelic INFO: Premain startup complete in 1,487ms
+2026-06-11T19:51:54,342+0530 [17468 1] com.newrelic INFO: New Relic Security is completely disabled by one of the user provided config `security.enabled`, `security.agent.enabled` or `high_security`. Not loading security capabilities.
+2026-06-11T19:51:56,480+0530 [17468 59] com.newrelic INFO: Server Info: Apache Tomcat/11.0.15
+2026-06-11T19:51:57,961+0530 [17468 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down
+2026-06-11T19:52:38,395+0530 [17901 1] com.newrelic INFO: Writing to New Relic log file: /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/logs/newrelic_agent.log
+2026-06-11T19:52:38,396+0530 [17901 1] com.newrelic INFO: JRE vendor Homebrew version 21.0.10
+2026-06-11T19:52:38,396+0530 [17901 1] com.newrelic INFO: JVM vendor Homebrew OpenJDK 64-Bit Server VM version 21.0.10
+2026-06-11T19:52:38,396+0530 [17901 1] com.newrelic INFO: OS Mac OS X version 26.5.1 arch aarch64
+2026-06-11T19:52:38,396+0530 [17901 1] com.newrelic INFO: Agent Host: Priyanks-MacBook-Air.local IP: 127.0.0.1
+2026-06-11T19:52:38,396+0530 [17901 1] com.newrelic INFO: New Relic Agent v9.2.0 is initializing...
+2026-06-11T19:52:38,403+0530 [17901 1] com.newrelic INFO: AgentCollectionFactory: Using Caffeine 3.x for Java 21
+2026-06-11T19:52:38,705+0530 [17901 31] com.newrelic INFO: Instrumentation com.newrelic.instrumentation.jdbc-resultset is disabled. Skipping.
+2026-06-11T19:52:39,135+0530 [17901 1] com.newrelic INFO: Started Adaptive Sampler with sampling target 120 and report period 60 seconds.
+2026-06-11T19:52:39,136+0530 [17901 1] com.newrelic INFO: The full granularity root sampler was configured to use the adaptive sampler type.
+2026-06-11T19:52:39,136+0530 [17901 1] com.newrelic INFO: The full granularity remote_parent_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:52:39,136+0530 [17901 1] com.newrelic INFO: The full granularity remote_parent_not_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:52:39,137+0530 [17901 1] com.newrelic.agent.RPMServiceManagerImpl INFO: Configured to connect to New Relic at collector.newrelic.com:443
+2026-06-11T19:52:39,246+0530 [17901 1] com.newrelic INFO: Setting audit_mode to false
+2026-06-11T19:52:39,304+0530 [17901 1] com.newrelic.agent.config.ConfigServiceImpl INFO: Configuration file is /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/./newrelic.yml
+2026-06-11T19:52:39,306+0530 [17901 1] com.newrelic INFO: New Relic Agent v9.2.0 has started
+2026-06-11T19:52:39,306+0530 [17901 1] com.newrelic INFO: Agent class loader: com.newrelic.bootstrap.BootstrapAgent$JVMAgentClassLoader@33e5ccce
+2026-06-11T19:52:39,306+0530 [17901 1] com.newrelic INFO: Premain startup complete in 1,354ms
+2026-06-11T19:52:39,307+0530 [17901 1] com.newrelic INFO: New Relic Security is completely disabled by one of the user provided config `security.enabled`, `security.agent.enabled` or `high_security`. Not loading security capabilities.
+2026-06-11T19:52:42,805+0530 [17901 59] com.newrelic INFO: Server Info: Apache Tomcat/11.0.15
+2026-06-11T19:52:44,390+0530 [17901 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down
+2026-06-11T19:53:25,289+0530 [18117 1] com.newrelic INFO: Writing to New Relic log file: /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/logs/newrelic_agent.log
+2026-06-11T19:53:25,289+0530 [18117 1] com.newrelic INFO: JRE vendor Homebrew version 21.0.10
+2026-06-11T19:53:25,289+0530 [18117 1] com.newrelic INFO: JVM vendor Homebrew OpenJDK 64-Bit Server VM version 21.0.10
+2026-06-11T19:53:25,289+0530 [18117 1] com.newrelic INFO: OS Mac OS X version 26.5.1 arch aarch64
+2026-06-11T19:53:25,289+0530 [18117 1] com.newrelic INFO: Agent Host: Priyanks-MacBook-Air.local IP: 127.0.0.1
+2026-06-11T19:53:25,290+0530 [18117 1] com.newrelic INFO: New Relic Agent v9.2.0 is initializing...
+2026-06-11T19:53:25,297+0530 [18117 1] com.newrelic INFO: AgentCollectionFactory: Using Caffeine 3.x for Java 21
+2026-06-11T19:53:25,577+0530 [18117 31] com.newrelic INFO: Instrumentation com.newrelic.instrumentation.jdbc-resultset is disabled. Skipping.
+2026-06-11T19:53:26,045+0530 [18117 1] com.newrelic INFO: Started Adaptive Sampler with sampling target 120 and report period 60 seconds.
+2026-06-11T19:53:26,045+0530 [18117 1] com.newrelic INFO: The full granularity root sampler was configured to use the adaptive sampler type.
+2026-06-11T19:53:26,045+0530 [18117 1] com.newrelic INFO: The full granularity remote_parent_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:53:26,045+0530 [18117 1] com.newrelic INFO: The full granularity remote_parent_not_sampled sampler was configured to use the adaptive sampler type.
+2026-06-11T19:53:26,047+0530 [18117 1] com.newrelic.agent.RPMServiceManagerImpl INFO: Configured to connect to New Relic at collector.newrelic.com:443
+2026-06-11T19:53:26,155+0530 [18117 1] com.newrelic INFO: Setting audit_mode to false
+2026-06-11T19:53:26,212+0530 [18117 1] com.newrelic.agent.config.ConfigServiceImpl INFO: Configuration file is /Users/priyankgupta/Downloads/SpringBoot_Cohort/NexusCommerce/newrelic/./newrelic.yml
+2026-06-11T19:53:26,214+0530 [18117 1] com.newrelic INFO: New Relic Agent v9.2.0 has started
+2026-06-11T19:53:26,214+0530 [18117 1] com.newrelic INFO: Agent class loader: com.newrelic.bootstrap.BootstrapAgent$JVMAgentClassLoader@33e5ccce
+2026-06-11T19:53:26,214+0530 [18117 1] com.newrelic INFO: Premain startup complete in 1,358ms
+2026-06-11T19:53:26,215+0530 [18117 1] com.newrelic INFO: New Relic Security is completely disabled by one of the user provided config `security.enabled`, `security.agent.enabled` or `high_security`. Not loading security capabilities.
+2026-06-11T19:53:28,242+0530 [18117 59] com.newrelic INFO: Server Info: Apache Tomcat/11.0.15
+2026-06-11T19:53:36,237+0530 [18117 55] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-11T19:53:36,240+0530 [18117 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-11T19:53:37,665+0530 [18117 55] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-11T19:53:38,550+0530 [18117 55] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-11T19:53:38,550+0530 [18117 55] com.newrelic INFO: Agent run id: BagypS__9AzRAHoC5TlpdwNqKsU8AAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-11T19:53:38,551+0530 [18117 55] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-11T19:53:38,551+0530 [18117 55] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-11T19:53:38,554+0530 [18117 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-11T19:53:38,554+0530 [18117 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-11T19:53:38,554+0530 [18117 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-11T19:53:38,557+0530 [18117 55] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-11T19:53:38,557+0530 [18117 55] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-11T19:53:38,557+0530 [18117 55] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-11T19:53:40,494+0530 [18117 55] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-11T19:53:40,495+0530 [18117 55] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-11T19:53:40,496+0530 [18117 55] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-11T20:48:31,938+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-11T21:02:18,251+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-11T21:30:39,220+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-11T23:38:39,698+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-11T23:38:39,706+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-11T23:38:39,714+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-11T23:38:39,715+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-11T23:39:16,261+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-11T23:58:32,331+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-11T23:58:37,315+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-11T23:58:37,325+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-11T23:58:37,325+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-12T00:07:14,809+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-12T00:07:19,786+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-12T00:07:19,791+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-12T00:07:19,792+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-12T00:18:38,388+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-12T00:19:13,340+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-12T00:19:13,349+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-12T00:19:13,349+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-12T00:20:13,350+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-12T00:20:13,358+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-12T00:20:13,358+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-12T00:21:15,935+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-12T03:02:32,478+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-12T04:44:36,723+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-12T10:45:46,137+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-12T15:14:14,629+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-12T15:14:14,630+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-12T15:14:18,578+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-12T16:31:29,007+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-12T17:51:44,998+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-12T20:19:20,558+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-12T22:06:33,338+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-12T22:54:27,134+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-13T00:36:41,090+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-13T00:38:17,224+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-13T00:38:17,237+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-13T00:38:18,010+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-13T00:38:18,023+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-13T00:38:19,132+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-13T00:38:19,869+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-13T00:38:19,869+0530 [18117 84] com.newrelic INFO: Agent run id: BbMyrk6M27qPAHoC5TlpdwNqLFmIAAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-13T00:38:19,871+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-13T00:38:19,872+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-13T00:38:19,874+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-13T00:38:19,874+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-13T00:38:19,874+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-13T00:38:19,885+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-13T00:38:19,885+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-13T00:38:19,885+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-13T00:38:19,910+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-13T00:38:19,910+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-13T01:48:39,850+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-13T01:48:39,862+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-13T01:48:39,862+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known
+2026-06-13T01:49:15,886+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-13T01:49:15,892+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-13T01:49:15,892+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-13T01:50:18,637+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-13T04:44:02,073+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-13T10:58:06,932+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-13T11:52:28,190+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-13T14:09:55,690+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-13T14:31:53,395+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-13T15:26:26,653+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-13T20:24:57,315+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-13T21:28:19,122+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-13T21:44:41,405+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-14T00:16:15,220+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-14T00:44:27,475+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-14T00:45:55,209+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-14T00:45:55,214+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-14T00:45:56,422+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-14T00:45:56,432+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-14T00:45:57,957+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-14T00:45:58,973+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-14T00:45:58,974+0530 [18117 84] com.newrelic INFO: Agent run id: BZa5JceZKxGGAHoC5TlpdwNqLaysAAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-14T00:45:58,975+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-14T00:45:58,975+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-14T00:45:58,977+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-14T00:45:58,977+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-14T00:45:58,977+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-14T00:45:58,986+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-14T00:45:58,986+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-14T00:45:58,986+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-14T00:45:58,997+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-14T00:45:58,998+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-14T05:37:36,513+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-14T11:01:12,938+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-14T12:30:06,851+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-14T15:04:18,805+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-14T16:37:43,017+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-14T20:39:58,442+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-14T20:41:05,255+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-14T23:21:50,840+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-14T23:21:50,848+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-14T23:21:52,203+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-14T23:21:52,215+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-14T23:21:54,214+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-14T23:21:55,290+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-14T23:21:55,290+0530 [18117 84] com.newrelic INFO: Agent run id: BUm7yMXvZnrqAHoC5TlpdwNqLup8AAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-14T23:21:55,291+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-14T23:21:55,292+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-14T23:21:55,293+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-14T23:21:55,293+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-14T23:21:55,293+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-14T23:21:55,297+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-14T23:21:55,297+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-14T23:21:55,297+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-14T23:21:55,312+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-14T23:21:55,312+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-15T02:41:26,450+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T03:25:49,347+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T06:13:00,636+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T07:49:53,874+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T09:16:29,216+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T09:52:49,196+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T10:34:52,000+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T11:12:32,817+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T11:48:25,334+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T12:24:25,029+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T12:52:00,687+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-15T14:57:59,869+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-15T15:07:57,832+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-15T17:41:48,983+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-15T20:44:53,764+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-15T20:44:53,772+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-15T20:44:57,259+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-15T21:01:05,321+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-15T22:36:41,001+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T00:00:02,139+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T00:11:24,455+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-16T00:11:24,460+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-16T00:11:25,706+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-16T00:11:25,723+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-16T00:11:27,269+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-16T00:11:28,958+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-16T00:11:28,958+0530 [18117 84] com.newrelic INFO: Agent run id: BdD1p2HDL91PAHoC5TlpdwNqMEe0AAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-16T00:11:28,964+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-16T00:11:28,965+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-16T00:11:28,970+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-16T00:11:28,970+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-16T00:11:28,970+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-16T00:11:28,986+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-16T00:11:28,986+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-16T00:11:28,986+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-16T00:11:29,023+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-16T00:11:29,024+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-16T03:09:07,572+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-16T03:25:31,397+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T10:01:18,259+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : com.newrelic.agent.deps.org.apache.http.conn.ConnectTimeoutException: Connect to collector.newrelic.com:443 [collector.newrelic.com/162.247.241.2] failed: Read timed out.
+2026-06-16T11:04:01,359+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-16T12:04:17,935+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-16T12:24:37,527+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T12:26:34,579+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-16T13:22:28,476+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-16T13:42:40,383+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T14:05:08,076+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T15:06:26,621+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-16T16:29:22,190+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-16T19:47:18,742+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-16T19:47:18,747+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-16T19:47:18,753+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-16T19:47:18,757+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-16T19:47:18,757+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-16T19:47:18,766+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-16T19:47:18,767+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-16T19:47:26,347+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-16T21:47:48,167+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-17T02:34:49,546+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-17T08:40:07,592+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-17T08:40:08,878+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-17T08:40:08,721+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-17T08:40:08,923+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known
+2026-06-17T08:40:08,973+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-17T08:40:09,023+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-17T08:40:09,023+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-17T10:24:40,979+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-17T10:24:46,033+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-17T10:59:31,014+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-17T12:25:40,317+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-17T13:00:28,843+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-17T13:00:28,844+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-17T13:00:28,855+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.UnknownHostException: collector.newrelic.com.
+2026-06-17T13:00:28,856+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.UnknownHostException: collector.newrelic.com
+2026-06-17T17:18:13,681+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-17T17:18:16,650+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-17T19:07:38,001+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-17T19:07:38,003+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-17T19:24:52,618+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-17T19:24:52,619+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketException: Connection reset
+2026-06-17T19:33:00,951+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Network is unreachable). Please check your network / proxy settings.
+2026-06-17T20:23:20,325+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-17T20:23:21,322+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-17T20:49:23,052+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Network is unreachable). Please check your network / proxy settings.
+2026-06-18T00:38:09,178+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-18T00:38:09,180+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-18T00:38:13,346+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-18T01:38:43,380+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T03:25:59,473+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T09:24:46,113+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-18T13:27:43,297+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-18T13:27:43,299+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-18T13:27:46,964+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-18T14:45:12,777+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T14:54:26,799+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-18T16:03:22,445+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-18T17:04:19,339+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T18:32:48,556+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-18T19:33:44,712+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T19:41:51,851+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.UnknownHostException: collector.newrelic.com: nodename nor servname provided, or not known.
+2026-06-18T20:39:06,110+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-18T20:39:06,119+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-18T20:39:10,278+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-18T20:40:06,935+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-18T20:40:06,938+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-18T20:40:08,162+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-18T20:40:08,179+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-18T20:40:09,712+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-18T20:40:11,405+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-18T20:40:11,405+0530 [18117 84] com.newrelic INFO: Agent run id: BZI-oquqq8KTAHoC5TlpdwNqNArAAAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-18T20:40:11,412+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-18T20:40:11,414+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-18T20:40:11,415+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-18T20:40:11,415+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-18T20:40:11,415+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-18T20:40:11,424+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-18T20:40:11,424+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-18T20:40:11,424+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-18T20:40:11,449+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-18T20:40:11,449+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-18T21:23:56,061+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-18T21:54:16,776+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-19T00:24:51,542+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-19T01:44:37,009+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-19T01:44:37,014+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-19T01:44:40,618+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-19T05:38:54,325+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T06:22:08,209+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-19T06:41:47,664+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-19T07:01:37,057+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-19T07:20:29,767+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-19T07:37:27,379+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-19T09:20:44,788+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T11:19:59,958+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T13:31:28,245+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T15:19:06,922+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T16:28:15,988+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-19T16:28:16,007+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Network is unreachable). Please check your network / proxy settings.
+2026-06-19T16:28:16,007+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketException: Network is unreachable
+2026-06-19T18:04:43,984+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T18:04:45,989+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-19T19:22:27,190+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-19T21:24:23,409+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-19T21:57:44,621+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-20T00:10:47,074+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-20T05:56:28,548+0530 [18117 85] com.newrelic ERROR: Remote log_event_data call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-20T06:12:02,288+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-20T06:12:02,294+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-20T06:29:47,860+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-20T06:29:49,356+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-20T06:29:49,371+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-20T06:29:51,885+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-20T10:33:23,167+0530 [18117 84] com.newrelic ERROR: Remote connect call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-20T10:33:23,173+0530 [18117 84] com.newrelic INFO: An unexpected error occurred sending metric data to New Relic. Please file a support ticket once you have seen several of these messages in a short period of time: java.net.SocketTimeoutException: Read timed out
+2026-06-20T10:33:23,190+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-20T10:33:23,194+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-20T10:33:29,266+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-20T10:33:31,090+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-20T10:33:31,091+0530 [18117 84] com.newrelic INFO: Agent run id: BfxvG6mNHuAjAHoC5TlpdwNqNh98AAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-20T10:33:31,100+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-20T10:33:31,101+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-20T10:33:31,103+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-20T10:33:31,103+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-20T10:33:31,103+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-20T10:33:31,111+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-20T10:33:31,111+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-20T10:33:31,111+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-20T10:33:31,131+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-20T10:33:31,131+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-20T10:33:32,310+0530 [18117 84] com.newrelic INFO: Successfully reconnected to the New Relic data service.
+2026-06-20T10:49:02,072+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-20T13:16:20,867+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-20T15:16:00,002+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-20T17:34:22,775+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-20T19:04:49,583+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-20T19:55:56,167+0530 [18117 84] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-20T22:06:55,123+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-20T22:40:23,174+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Connection reset). Please check your network / proxy settings.
+2026-06-21T01:27:37,487+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T03:16:26,610+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T05:54:58,611+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T08:38:56,691+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T11:35:45,935+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T13:14:17,787+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Operation timed out). Please check your network / proxy settings.
+2026-06-21T18:02:59,340+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-21T18:03:03,003+0530 [18117 84] com.newrelic ERROR: Remote metric_data call failed : com.newrelic.agent.ForceRestartException: .
+2026-06-21T18:03:03,003+0530 [18117 84] com.newrelic WARN: Received a ForceRestartException: com.newrelic.agent.ForceRestartException: . The agent will attempt to reconnect for data reporting. If this message continues, please contact support via https://support.newrelic.com/.
+2026-06-21T18:03:04,035+0530 [18117 84] com.newrelic INFO: Host name is Priyanks-MacBook-Air.local, display host Priyanks-MacBook-Air.local for application NexusCommerce
+2026-06-21T18:03:04,041+0530 [18117 84] com.newrelic INFO: New Relic JFR Monitor is disabled: JFR config has not been enabled in the Java agent.
+2026-06-21T18:03:05,964+0530 [18117 84] com.newrelic INFO: Collector redirection to collector.newrelic.com:443
+2026-06-21T18:03:06,772+0530 [18117 84] com.newrelic INFO: Max payload size is 1,000,000 bytes
+2026-06-21T18:03:06,772+0530 [18117 84] com.newrelic INFO: Agent run id: BcX8v4jaGEpgAHoC5TlpdwNqN9p0AAIBAAAnIQEAAEbFAgQ5aWz3AwAFOS4yLjAAGlByaXlhbmtzLU1hY0Jvb2stQWlyLmxvY2FsAA1OZXh1c0NvbW1lcmNl
+2026-06-21T18:03:06,773+0530 [18117 84] com.newrelic INFO: Agent 18117@Priyanks-MacBook-Air.local/NexusCommerce connected to collector.newrelic.com:443
+2026-06-21T18:03:06,773+0530 [18117 84] com.newrelic INFO: Reporting to: https://one.newrelic.com/redirect/entity/Nzk5NjEzM3xBUE18QVBQTElDQVRJT058OTYzMjEwNDg3
+2026-06-21T18:03:06,773+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-21T18:03:06,773+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-21T18:03:06,773+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-21T18:03:06,782+0530 [18117 84] com.newrelic INFO: Using default collector host: collector.newrelic.com
+2026-06-21T18:03:06,782+0530 [18117 84] com.newrelic INFO: Using default metric ingest URI: https://metric-api.newrelic.com/metric/v1
+2026-06-21T18:03:06,782+0530 [18117 84] com.newrelic INFO: Using default event ingest URI: https://insights-collector.newrelic.com/v1/accounts/events
+2026-06-21T18:03:06,790+0530 [18117 84] com.newrelic INFO: Real user monitoring is enabled for application NexusCommerce. Auto instrumentation is enabled.
+2026-06-21T18:03:06,790+0530 [18117 84] com.newrelic INFO: Updating shared Adaptive Sampler sampling target to 120
+2026-06-21T18:37:48,553+0530 [18117 85] com.newrelic ERROR: A socket exception was encountered while sending data to New Relic (java.net.SocketException: Can't assign requested address). Please check your network / proxy settings.
+2026-06-21T23:24:04,915+0530 [18117 84] com.newrelic ERROR: Remote get_agent_commands call failed : java.net.SocketTimeoutException: Read timed out.
+2026-06-22T00:20:43,385+0530 [18117 26] com.newrelic.agent.core.CoreServiceImpl INFO: JVM is shutting down

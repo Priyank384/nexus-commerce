@@ -1,10 +1,10 @@
-package com.example.FakeCommerce;
+package com.example.NexusCommerce;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class FakeCommerceApplicationTests {
+class NexusCommerceApplicationTests {
 
 	@Test
 	void contextLoads() {

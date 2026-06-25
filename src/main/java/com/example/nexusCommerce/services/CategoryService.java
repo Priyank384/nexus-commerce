@@ -47,14 +47,14 @@ public class CategoryService {
     }
 
     public Category getCategoryById(Long id){
-        Optional<Category> cached = categoryRedisCache.getById(id);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
+        // Optional<Category> cached = categoryRedisCache.getById(id);
+        // if (cached.isPresent()) {
+        //     return cached.get();
+        // }
 
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category with id: " + id + " Not Found!"));
-        categoryRedisCache.putById(id, category);
+        // categoryRedisCache.putById(id, category);
         return category;
     }
 
