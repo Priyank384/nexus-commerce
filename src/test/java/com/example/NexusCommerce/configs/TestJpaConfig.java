@@ -1,4 +1,4 @@
-package com.example.NexusCommerce.configs;
+package com.example.nexusCommerce.configs;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;

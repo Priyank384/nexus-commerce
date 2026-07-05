@@ -1,4 +1,4 @@
-package com.example.NexusCommerce.services;
+package com.example.nexusCommerce.services;
 
 import java.util.List;
 import java.util.Optional;

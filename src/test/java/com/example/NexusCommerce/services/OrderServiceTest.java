@@ -1,4 +1,4 @@
-package com.example.NexusCommerce.services;
+package com.example.nexusCommerce.services;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
