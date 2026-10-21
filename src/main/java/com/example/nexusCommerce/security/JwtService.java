@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
@@ -37,6 +38,7 @@ public class JwtService {
     public String generateToken(User user) {
         Instant now = Instant.now();
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(user.getEmail())
                 .claim("uid", user.getId())
                 .claim("role", user.getRole().name())
@@ -52,17 +54,35 @@ public class JwtService {
      * security context; authorization then rejects the request.
      */
     public java.util.Optional<AuthenticatedUser> resolve(String token) {
+        Claims claims = parseClaims(token);
+        if (claims == null) return java.util.Optional.empty();
         try {
-            Claims claims = Jwts.parser()
-                    .verifyWith(key)
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
             Long uid = claims.get("uid", Number.class).longValue();
             Role role = Role.valueOf(claims.get("role", String.class));
             return java.util.Optional.of(new AuthenticatedUser(uid, claims.getSubject(), role));
-        } catch (JwtException | IllegalArgumentException | NullPointerException e) {
+        } catch (RuntimeException e) {
             return java.util.Optional.empty();
         }
     }
+
+    /**
+     * The jti + exp needed to add the token to the revocation blacklist on logout.
+     * Returns null for any malformed or expired token (nothing to revoke).
+     */
+    public TokenMetadata inspect(String token) {
+        Claims claims = parseClaims(token);
+        if (claims == null) return null;
+        Date exp = claims.getExpiration();
+        return new TokenMetadata(claims.getId(), exp == null ? null : exp.toInstant());
+    }
+
+    private Claims parseClaims(String token) {
+        try {
+            return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        } catch (JwtException | IllegalArgumentException | NullPointerException e) {
+            return null;
+        }
+    }
+
+    public record TokenMetadata(String jti, Instant expiresAt) {}
 }

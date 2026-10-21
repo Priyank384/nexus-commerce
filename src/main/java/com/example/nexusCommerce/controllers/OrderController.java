@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +20,7 @@ import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.security.AuthenticatedUser;
+import com.example.nexusCommerce.security.IdempotencyService;
 import com.example.nexusCommerce.services.OrderService;
 import com.example.nexusCommerce.utils.ApiResponse;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -37,6 +39,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class OrderController {
 
     private final OrderService orderService;
+    private final IdempotencyService idempotency;
 
     @Operation(summary = "List all orders",
                description = "Paged list across all users. Requires ROLE_ADMIN.")
@@ -49,14 +52,31 @@ public class OrderController {
     }
 
     @Operation(summary = "Place an order",
-               description = "Creates an order for the authenticated caller and atomically reserves stock for each line item.")
+               description = "Creates an order for the authenticated caller and atomically reserves stock for each line item. "
+                             + "Send an Idempotency-Key header to make retries safe: a repeat of the same key replays the original response.")
     @PostMapping
     public ResponseEntity<ApiResponse<GetOrderResponseDto>> createOrder(
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateOrderRequestDto requestDto,
             @AuthenticationPrincipal AuthenticatedUser caller) {
-        GetOrderResponseDto order = orderService.createOrder(requestDto, caller.id());
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .body(ApiResponse.success(order, "Order Created Successfully"));
+        boolean useIdem = idempotencyKey != null && !idempotencyKey.isBlank();
+        if (useIdem) {
+            var cached = idempotency.tryStart(idempotencyKey);
+            if (cached.isPresent()) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(cached.get());
+            }
+        }
+        GetOrderResponseDto order;
+        try {
+            order = orderService.createOrder(requestDto, caller.id());
+        } catch (RuntimeException ex) {
+            if (useIdem) idempotency.release(idempotencyKey);
+            throw ex;
+        }
+        ApiResponse<GetOrderResponseDto> body =
+                ApiResponse.success(order, "Order Created Successfully");
+        if (useIdem) idempotency.complete(idempotencyKey, body);
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
     @Operation(summary = "Delete an order",

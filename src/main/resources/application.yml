@@ -85,6 +85,11 @@ app:
     # default below is a fixed dev-only value so the app boots without a secret file.
     secret: ${JWT_SECRET:nexuscommerce-dev-only-secret-key-change-me-in-production-0123456789}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+    refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:7}
+  rate-limit:
+    login:
+      max: ${LOGIN_RATE_MAX:10}
+      window-seconds: ${LOGIN_RATE_WINDOW_SECONDS:60}
 
 springdoc:
   swagger-ui:

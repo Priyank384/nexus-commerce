@@ -24,6 +24,8 @@ import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Role;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.security.JwtService;
+import com.example.nexusCommerce.security.RefreshTokenService;
+import com.example.nexusCommerce.security.TokenBlacklistService;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -39,6 +41,12 @@ class AuthServiceTest {
 
     @Mock
     private UserAdapter userAdapter;
+
+    @Mock
+    private RefreshTokenService refreshTokens;
+
+    @Mock
+    private TokenBlacklistService blacklist;
 
     @InjectMocks
     private AuthServiceImpl authService;

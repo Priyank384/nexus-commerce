@@ -16,5 +16,7 @@ public class LoginResponseDto {
     @Builder.Default
     private String tokenType = "Bearer";
     private Instant expiresAt;
+    /** Opaque, single-use refresh token stored in Redis; use POST /api/v1/auth/refresh. */
+    private String refreshToken;
     private GetUserResponseDto user;
 }
