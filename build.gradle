@@ -48,6 +48,10 @@ dependencies {
 
 	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.flywaydb:flyway-mysql'
+
+	// Observability: HTTP health/info/metrics/prometheus endpoints, gated behind ROLE_ADMIN.
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 }
 
 tasks.named('test') {

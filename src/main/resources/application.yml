@@ -50,11 +50,34 @@ spring:
       timeout: 500ms
 server:
   port: ${PORT}
+  # Let in-flight requests finish on SIGTERM before the JVM exits; combined with the
+  # liveness/readiness probes under management.endpoint.health this is what makes a
+  # rolling restart safe.
+  shutdown: graceful
   compression:
     enabled: true
     # Small JSON responses compress slower than they save; only bother above ~2 KB.
     min-response-size: 2048
     mime-types: application/json
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # Only these are HTTP-reachable; /actuator/shutdown and /env stay off the wire.
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 app:
   jwt:

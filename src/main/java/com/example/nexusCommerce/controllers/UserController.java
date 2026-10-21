@@ -15,6 +15,7 @@ import com.example.nexusCommerce.utils.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "Users", description = "User account operations")
@@ -25,6 +26,8 @@ public class UserController {
 
     private final UserService userService;
 
+    @Operation(summary = "Register a new account",
+               description = "Public signup. Stores the password BCrypt-hashed and grants the USER role.")
     @PostMapping
     public ResponseEntity<ApiResponse<GetUserResponseDto>> createUser(@Valid @RequestBody CreateUserRequestDto requestDto) {
         GetUserResponseDto user = userService.createUser(requestDto);

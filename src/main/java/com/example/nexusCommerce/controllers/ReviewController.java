@@ -23,6 +23,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "Reviews", description = "Product reviews and moderation")
@@ -33,6 +34,8 @@ public class ReviewController {
 
     private final ReviewService reviewService;
 
+    @Operation(summary = "List reviews",
+               description = "Paged list of all reviews. Public; cached.")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<GetReviewResponseDto>>> getAllReviews(
             @RequestParam(name = "page", defaultValue = "0") int page,
@@ -42,6 +45,8 @@ public class ReviewController {
                 .body(ApiResponse.success(reviews, "Reviews fetched successfully"));
     }
 
+    @Operation(summary = "Create a review",
+               description = "Caller must have the referenced product on the referenced order. One live review per (order, product).")
     @PostMapping
     public ResponseEntity<ApiResponse<GetReviewResponseDto>> createReview(
             @Valid @RequestBody CreateReviewRequestDto requestDto,
@@ -51,6 +56,8 @@ public class ReviewController {
                 .body(ApiResponse.success(review, "Review created successfully"));
     }
 
+    @Operation(summary = "Delete a review",
+               description = "Soft-delete a review by id. Requires ROLE_ADMIN.")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteReview(@PathVariable Long id) {
         reviewService.deleteReview(id);
@@ -58,6 +65,8 @@ public class ReviewController {
                 .body(ApiResponse.success(null, "Review deleted successfully"));
     }
 
+    @Operation(summary = "Get a review by id",
+               description = "Single review lookup. Public; cached.")
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<GetReviewResponseDto>> getReviewById(@PathVariable Long id) {
         GetReviewResponseDto review = reviewService.getReviewById(id);
@@ -65,6 +74,8 @@ public class ReviewController {
                 .body(ApiResponse.success(review, "Review fetched successfully"));
     }
 
+    @Operation(summary = "List reviews for a product",
+               description = "Paged reviews of a specific product. Public; cached.")
     @GetMapping("/product/{productId}")
     public ResponseEntity<ApiResponse<PageResponse<GetReviewResponseDto>>> getReviewsByProductId(
             @PathVariable Long productId,
@@ -75,6 +86,8 @@ public class ReviewController {
                 .body(ApiResponse.success(reviews, "Reviews fetched successfully"));
     }
 
+    @Operation(summary = "List reviews for an order",
+               description = "Paged reviews attached to a specific order. Public; cached.")
     @GetMapping("/order/{orderId}")
     public ResponseEntity<ApiResponse<PageResponse<GetReviewResponseDto>>> getReviewsByOrderId(
             @PathVariable Long orderId,

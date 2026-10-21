@@ -14,6 +14,7 @@ import com.example.nexusCommerce.utils.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @Tag(name = "Auth", description = "Registration and login; issues the JWT bearer token")
@@ -24,6 +25,8 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Operation(summary = "Log in",
+               description = "Exchange email + password for a stateless JWT bearer token and its expiry.")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@Valid @RequestBody LoginRequestDto requestDto) {
         LoginResponseDto response = authService.login(requestDto);

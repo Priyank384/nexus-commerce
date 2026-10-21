@@ -21,6 +21,7 @@ import com.example.nexusCommerce.utils.Pagination;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RequiredArgsConstructor
@@ -31,12 +32,16 @@ public class CategoryController {
     
     private final CategoryService categoryService;
 
+    @Operation(summary = "Create a category",
+               description = "Adds a new category to the catalogue. Requires ROLE_ADMIN.")
     @PostMapping
     public ResponseEntity<ApiResponse<GetCategoryResponseDto>> createCategory(@Valid @RequestBody CreateCategoryRequestDto requestDto){
         GetCategoryResponseDto res = categoryService.createCategory(requestDto); 
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(res, "Category Created Successfully!"));
     }
 
+    @Operation(summary = "List categories",
+               description = "Paged list of categories. Public; cached.")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<GetCategoryResponseDto>>> getAllCategory(
             @RequestParam(name = "page", defaultValue = "0") int page,
@@ -49,6 +54,8 @@ public class CategoryController {
                 .ok(ApiResponse.success(categories, "Categories fetched successfully!"));
     }
 
+    @Operation(summary = "Get a category by id",
+               description = "Single category lookup. Public; cached.")
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<GetCategoryResponseDto>> getCategoryById(@PathVariable Long id){
         GetCategoryResponseDto category = categoryService.getCategoryById(id);
@@ -56,6 +63,8 @@ public class CategoryController {
                 .ok(ApiResponse.success(category, "Category fetched successfully!"));
     }
 
+    @Operation(summary = "Delete a category",
+               description = "Soft-deletes the category. Rejected if it still has live products. Requires ROLE_ADMIN.")
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteCategory(@PathVariable Long id){
         categoryService.deleteCategory(id);
@@ -63,6 +72,8 @@ public class CategoryController {
                 .ok(ApiResponse.success(null, "Category deleted successfully!"));
     }
 
+    @Operation(summary = "Update a category",
+               description = "Renames an existing category. Requires ROLE_ADMIN.")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<GetCategoryResponseDto>> updateCategory(@PathVariable Long id,
                                                                 @Valid @RequestBody CreateCategoryRequestDto requestDto){
