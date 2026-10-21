@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 public class GetOrderResponseDto {
     
     private Long id;
+    private Long userId;
     private OrderStatus orderStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

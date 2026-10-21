@@ -20,6 +20,5 @@
     <root level="INFO">
         <appender-ref ref="CONSOLE" />
         <appender-ref ref="LOGSTASH" />
-        <appender-ref ref="OTEL" />
     </root>
 </configuration>

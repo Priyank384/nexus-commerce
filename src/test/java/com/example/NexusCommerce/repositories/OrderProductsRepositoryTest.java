@@ -15,17 +15,18 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
-import com.example.nexusCommerce.configs.TestJpaConfig;
+import com.example.nexusCommerce.configs.JpaAuditingConfig;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.schema.User;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
-@Import(TestJpaConfig.class)
+@Import(JpaAuditingConfig.class)
 class OrderProductsRepositoryTest {
 
     @Autowired
@@ -57,11 +58,17 @@ class OrderProductsRepositoryTest {
                 .rating(BigDecimal.valueOf(4.8))
                 .category(category)
                 .build();
-        order = Order.builder().status(OrderStatus.PENDING).build();
-        phoneLineItem = OrderProducts.builder().order(order).product(phone).quantity(2).build();
-        laptopLineItem = OrderProducts.builder().order(order).product(laptop).quantity(1).build();
+        User user = User.builder()
+                .name("Test User")
+                .email("test@example.com")
+                .passwordHash("hashed")
+                .build();
+        order = Order.builder().status(OrderStatus.PENDING).user(user).build();
+        phoneLineItem = OrderProducts.builder().order(order).product(phone).quantity(2).unitPrice(phone.getPrice()).productName(phone.getTitle()).build();
+        laptopLineItem = OrderProducts.builder().order(order).product(laptop).quantity(1).unitPrice(laptop.getPrice()).productName(laptop.getTitle()).build();
 
         testEntityManager.persistAndFlush(category);
+        testEntityManager.persistAndFlush(user);
         testEntityManager.persistAndFlush(phone);
         testEntityManager.persistAndFlush(laptop);
         testEntityManager.persistAndFlush(order);
@@ -71,8 +78,8 @@ class OrderProductsRepositoryTest {
     }
 
     @Test
-    void findByOrderId_returnsAllLineItemsForOrder() {
-        List<OrderProducts> result = orderProductsRepository.findByOrderId(order.getId());
+    void findByOrderIdsWithProduct_returnsAllLineItemsForOrders() {
+        List<OrderProducts> result = orderProductsRepository.findByOrderIdsWithProduct(List.of(order.getId()));
 
         assertEquals(2, result.size());
         assertTrue(result.stream().anyMatch(item -> item.getQuantity() == 2));
@@ -80,13 +87,13 @@ class OrderProductsRepositoryTest {
     }
 
     @Test
-    void findByOrderWithProduct_fetchesProductDetails() {
+    void findByOrderWithProduct_readsSnapshotIdentityWithoutLoadingProduct() {
         Order managedOrder = testEntityManager.getEntityManager().find(Order.class, order.getId());
 
         List<OrderProducts> result = orderProductsRepository.findByOrderWithProduct(managedOrder);
 
         assertEquals(2, result.size());
-        assertTrue(result.stream().anyMatch(item -> "Phone".equals(item.getProduct().getTitle())));
-        assertTrue(result.stream().anyMatch(item -> "Laptop".equals(item.getProduct().getTitle())));
+        assertTrue(result.stream().anyMatch(item -> "Phone".equals(item.getProductName())));
+        assertTrue(result.stream().anyMatch(item -> "Laptop".equals(item.getProductName())));
     }
 }

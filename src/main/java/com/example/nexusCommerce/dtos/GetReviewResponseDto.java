@@ -16,6 +16,8 @@ public class GetReviewResponseDto {
 
     private Long id;
 
+    private Long userId;
+
     private Long productId;
 
     private Long orderId;

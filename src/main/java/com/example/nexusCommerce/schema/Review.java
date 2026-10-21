@@ -13,10 +13,14 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
@@ -25,6 +29,11 @@ import lombok.NoArgsConstructor;
 @SQLDelete(sql = "UPDATE reviews SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
 @SQLRestriction("deleted_datetime is NULL")
 public class Review extends BaseEntity{
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     private String comment;
 
     @ManyToOne(fetch = FetchType.LAZY)

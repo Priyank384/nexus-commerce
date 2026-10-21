@@ -14,10 +14,14 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
 
-@Data
+@Getter
+@Setter
+@EqualsAndHashCode(callSuper = true, onlyExplicitlyIncluded = true)
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
@@ -48,4 +52,8 @@ public class Product extends BaseEntity{
 
     @Column(nullable=false, precision = 3, scale = 1)
     private BigDecimal rating;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer stock = 0;
 }

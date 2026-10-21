@@ -15,15 +15,16 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 
-import com.example.nexusCommerce.configs.TestJpaConfig;
+import com.example.nexusCommerce.configs.JpaAuditingConfig;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace=AutoConfigureTestDatabase.Replace.ANY)
-@Import(TestJpaConfig.class)
+@Import(JpaAuditingConfig.class)
 public class ProductRepositoryTest {
 
     @Autowired
@@ -77,7 +78,7 @@ public class ProductRepositoryTest {
 
     @Test
     void findByCategoryNameIgnoreCase_whenCategoryMatches_returnsProducts() {
-        List<Product> result = productRepository.findByCategory_NameIgnoreCase("electronics");
+        List<Product> result = productRepository.findByCategory_NameIgnoreCase("electronics", Pageable.unpaged()).getContent();
 
         assertEquals(2, result.size());
         assertTrue(result.stream().anyMatch(p -> "Phone".equals(p.getTitle())));
@@ -86,7 +87,7 @@ public class ProductRepositoryTest {
 
     @Test
     void findByCategoryNameIgnoreCase_whenCategoryDoesNotMatch_returnsEmptyList() {
-        List<Product> result = productRepository.findByCategory_NameIgnoreCase("Books");
+        List<Product> result = productRepository.findByCategory_NameIgnoreCase("Books", Pageable.unpaged()).getContent();
 
         assertTrue(result.isEmpty());
     }

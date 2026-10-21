@@ -10,12 +10,16 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import com.example.nexusCommerce.adapters.ReviewAdapter;
 import com.example.nexusCommerce.dtos.CreateReviewRequestDto;
@@ -27,13 +31,13 @@ import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ReviewRepository;
+import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Order;
-import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Review;
-import com.example.nexusCommerce.services.ReviewService;
-import com.example.nexusCommerce.services.cache.ReviewRedisCache;
+import com.example.nexusCommerce.schema.User;
+import com.example.nexusCommerce.utils.PageResponse;
 
 @ExtendWith(MockitoExtension.class)
 class ReviewServiceTest {
@@ -54,13 +58,19 @@ class ReviewServiceTest {
     private OrderProductsRepository orderProductsRepository;
 
     @Mock
-    private ReviewRedisCache reviewRedisCache;
+    private UserRepository userRepository;
 
     @InjectMocks
-    private ReviewService reviewService;
+    private ReviewServiceImpl reviewService;
+
+    private User sampleUser() {
+        User user = User.builder().name("Reviewer").email("reviewer@example.com").build();
+        user.setId(7L);
+        return user;
+    }
 
     private Order sampleOrder() {
-        Order order = Order.builder().status(OrderStatus.DELIVERED).build();
+        Order order = Order.builder().status(OrderStatus.DELIVERED).user(sampleUser()).build();
         order.setId(3L);
         return order;
     }
@@ -76,51 +86,38 @@ class ReviewServiceTest {
     }
 
     @Test
-    void getAllReviews_whenCacheHit_returnsCachedReviews() {
-        GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).productId(1L).orderId(3L).build();
-        when(reviewRedisCache.getAll()).thenReturn(Optional.of(List.of(dto)));
-
-        List<GetReviewResponseDto> result = reviewService.getAllReviews();
-
-        assertEquals(1, result.size());
-        verify(reviewRepository, never()).findAll();
-    }
-
-    @Test
-    void getAllReviews_whenCacheMiss_loadsFromRepositoryAndCaches() {
+    void getAllReviews_mapsPageOfReviews() {
         Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
         review.setId(1L);
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(8)).build();
 
-        when(reviewRedisCache.getAll()).thenReturn(Optional.empty());
-        when(reviewRepository.findAll()).thenReturn(List.of(review));
-        when(reviewAdapter.mapToGetReviewResponseDtoList(List.of(review))).thenReturn(List.of(dto));
+        when(reviewRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1));
+        when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
 
-        List<GetReviewResponseDto> result = reviewService.getAllReviews();
+        PageResponse<GetReviewResponseDto> result = reviewService.getAllReviews(0, 20);
 
-        assertEquals(1, result.size());
-        verify(reviewRedisCache).putAll(List.of(dto));
+        assertEquals(1, result.getContent().size());
+        assertEquals(1L, result.getContent().get(0).getId());
+        assertEquals(1, result.getTotalElements());
     }
 
     @Test
-    void getReviewById_whenCacheMiss_loadsFromRepositoryAndCaches() {
+    void getReviewById_returnsMappedReview() {
         Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
         review.setId(1L);
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(8)).build();
 
-        when(reviewRedisCache.getById(1L)).thenReturn(Optional.empty());
         when(reviewRepository.findById(1L)).thenReturn(Optional.of(review));
         when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
 
         GetReviewResponseDto result = reviewService.getReviewById(1L);
 
         assertEquals(1L, result.getId());
-        verify(reviewRedisCache).putById(1L, dto);
     }
 
     @Test
     void getReviewById_whenNotFound_throwsResourceNotFoundException() {
-        when(reviewRedisCache.getById(1L)).thenReturn(Optional.empty());
         when(reviewRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> reviewService.getReviewById(1L));
@@ -145,33 +142,31 @@ class ReviewServiceTest {
     }
 
     @Test
-    void getReviewsByProductId_whenCacheMiss_loadsFromRepositoryAndCaches() {
+    void getReviewsByProductId_mapsMatchingReviews() {
         Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).productId(1L).build();
 
-        when(reviewRedisCache.getByProductId(1L)).thenReturn(Optional.empty());
-        when(reviewRepository.findByProductId(1L)).thenReturn(List.of(review));
-        when(reviewAdapter.mapToGetReviewResponseDtoList(List.of(review))).thenReturn(List.of(dto));
+        when(reviewRepository.findByProductId(eq(1L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1));
+        when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
 
-        List<GetReviewResponseDto> result = reviewService.getReviewsByProductId(1L);
+        PageResponse<GetReviewResponseDto> result = reviewService.getReviewsByProductId(1L, 0, 20);
 
-        assertEquals(1, result.size());
-        verify(reviewRedisCache).putByProductId(1L, List.of(dto));
+        assertEquals(1, result.getContent().size());
     }
 
     @Test
-    void getReviewsByOrderId_whenCacheMiss_loadsFromRepositoryAndCaches() {
+    void getReviewsByOrderId_mapsMatchingReviews() {
         Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).orderId(3L).build();
 
-        when(reviewRedisCache.getByOrderId(3L)).thenReturn(Optional.empty());
-        when(reviewRepository.findByOrderId(3L)).thenReturn(List.of(review));
-        when(reviewAdapter.mapToGetReviewResponseDtoList(List.of(review))).thenReturn(List.of(dto));
+        when(reviewRepository.findByOrderId(eq(3L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1));
+        when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
 
-        List<GetReviewResponseDto> result = reviewService.getReviewsByOrderId(3L);
+        PageResponse<GetReviewResponseDto> result = reviewService.getReviewsByOrderId(3L, 0, 20);
 
-        assertEquals(1, result.size());
-        verify(reviewRedisCache).putByOrderId(3L, List.of(dto));
+        assertEquals(1, result.getContent().size());
     }
 
     @Test
@@ -190,22 +185,39 @@ class ReviewServiceTest {
                 .id(1L)
                 .orderId(3L)
                 .productId(1L)
+                .userId(7L)
                 .rating(BigDecimal.valueOf(9))
                 .comment("Excellent")
                 .build();
-        OrderProducts lineItem = OrderProducts.builder().order(order).product(product).quantity(1).build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(orderProductsRepository.findByOrderId(3L)).thenReturn(List.of(lineItem));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
         when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(sampleUser()));
         when(reviewRepository.save(any(Review.class))).thenReturn(saved);
         when(reviewAdapter.mapToGetReviewResponseDto(saved)).thenReturn(response);
 
-        GetReviewResponseDto result = reviewService.createReview(dto);
+        GetReviewResponseDto result = reviewService.createReview(dto, 7L);
 
         assertEquals(BigDecimal.valueOf(9), result.getRating());
         assertEquals("Excellent", result.getComment());
+        assertEquals(7L, result.getUserId());
+    }
+
+    @Test
+    void createReview_whenNotOrderOwner_throwsInvalidRequestException() {
+        Order order = sampleOrder();
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(8))
+                .build();
+
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 42L));
+        verify(reviewRepository, never()).save(any(Review.class));
     }
 
     @Test
@@ -224,19 +236,20 @@ class ReviewServiceTest {
                 .id(1L)
                 .orderId(3L)
                 .productId(1L)
+                .userId(7L)
                 .rating(BigDecimal.valueOf(8))
                 .comment(null)
                 .build();
-        OrderProducts lineItem = OrderProducts.builder().order(order).product(product).quantity(1).build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(orderProductsRepository.findByOrderId(3L)).thenReturn(List.of(lineItem));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
         when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(sampleUser()));
         when(reviewRepository.save(any(Review.class))).thenReturn(saved);
         when(reviewAdapter.mapToGetReviewResponseDto(saved)).thenReturn(response);
 
-        GetReviewResponseDto result = reviewService.createReview(dto);
+        GetReviewResponseDto result = reviewService.createReview(dto, 7L);
 
         assertNull(result.getComment());
     }
@@ -251,7 +264,7 @@ class ReviewServiceTest {
 
         when(orderRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> reviewService.createReview(dto));
+        assertThrows(ResourceNotFoundException.class, () -> reviewService.createReview(dto, 7L));
     }
 
     @Test
@@ -266,9 +279,9 @@ class ReviewServiceTest {
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(orderProductsRepository.findByOrderId(3L)).thenReturn(List.of());
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(false);
 
-        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto));
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
     }
 
     @Test
@@ -280,14 +293,13 @@ class ReviewServiceTest {
                 .productId(1L)
                 .rating(BigDecimal.valueOf(8))
                 .build();
-        OrderProducts lineItem = OrderProducts.builder().order(order).product(product).quantity(1).build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-        when(orderProductsRepository.findByOrderId(3L)).thenReturn(List.of(lineItem));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
         when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(true);
 
-        assertThrows(DuplicateResourceException.class, () -> reviewService.createReview(dto));
+        assertThrows(DuplicateResourceException.class, () -> reviewService.createReview(dto, 7L));
     }
 
     @Test
@@ -297,7 +309,7 @@ class ReviewServiceTest {
                 .productId(1L)
                 .build();
 
-        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto));
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
     }
 
     @Test
@@ -308,7 +320,7 @@ class ReviewServiceTest {
                 .rating(BigDecimal.valueOf(11))
                 .build();
 
-        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto));
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
     }
 
     @Test
@@ -319,6 +331,38 @@ class ReviewServiceTest {
                 .rating(BigDecimal.ZERO)
                 .build();
 
-        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto));
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
+    }
+
+    @Test
+    void createReview_whenNoAuthenticatedUser_throwsInvalidRequestException() {
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(8))
+                .build();
+
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, null));
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void createReview_whenUserNotFound_throwsResourceNotFoundException() {
+        Order order = sampleOrder();
+        Product product = sampleProduct();
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(8))
+                .build();
+
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
+        when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> reviewService.createReview(dto, 7L));
+        verify(reviewRepository, never()).save(any(Review.class));
     }
 }

@@ -13,16 +13,22 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
+import com.example.nexusCommerce.adapters.CategoryAdapter;
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
+import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
+import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
-import com.example.nexusCommerce.services.CategoryService;
-import com.example.nexusCommerce.services.cache.CategoryRedisCache;
+import com.example.nexusCommerce.utils.PageResponse;
 
 @ExtendWith(MockitoExtension.class)
 class CategoryServiceTest {
@@ -31,10 +37,13 @@ class CategoryServiceTest {
     private CategoryRepository categoryRepository;
 
     @Mock
-    private CategoryRedisCache categoryRedisCache;
+    private ProductRepository productRepository;
+
+    @Spy
+    private CategoryAdapter categoryAdapter = new CategoryAdapter();
 
     @InjectMocks
-    private CategoryService categoryService;
+    private CategoryServiceImpl categoryService;
 
     @Test
     void createCategory_savesAndReturnsCategory() {
@@ -45,7 +54,7 @@ class CategoryServiceTest {
         when(categoryRepository.existsByNameIgnoreCase("Test Category")).thenReturn(false);
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
 
-        Category result = categoryService.createCategory(dto);
+        GetCategoryResponseDto result = categoryService.createCategory(dto);
 
         assertEquals("Test Category", result.getName());
         assertEquals(1L, result.getId());
@@ -60,7 +69,7 @@ class CategoryServiceTest {
         when(categoryRepository.existsByNameIgnoreCase("Electronics")).thenReturn(false);
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
 
-        Category result = categoryService.createCategory(dto);
+        GetCategoryResponseDto result = categoryService.createCategory(dto);
 
         assertEquals("Electronics", result.getName());
     }
@@ -81,29 +90,17 @@ class CategoryServiceTest {
     }
 
     @Test
-    void getAllCategory_whenCacheHit_returnsCachedCategories() {
+    void getAllCategory_returnsPageOfRepositoryCategories() {
         Category category = Category.builder().name("Electronics").build();
         category.setId(1L);
-        when(categoryRedisCache.getAll()).thenReturn(Optional.of(List.of(category)));
+        when(categoryRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(category), PageRequest.of(0, 20), 1));
 
-        List<Category> result = categoryService.getAllCategory();
+        PageResponse<GetCategoryResponseDto> result = categoryService.getAllCategory(0, 20);
 
-        assertEquals(1, result.size());
-        assertEquals("Electronics", result.get(0).getName());
-        verify(categoryRepository, never()).findAll();
-    }
-
-    @Test
-    void getAllCategory_whenCacheMiss_loadsFromRepositoryAndCaches() {
-        Category category = Category.builder().name("Electronics").build();
-        category.setId(1L);
-        when(categoryRedisCache.getAll()).thenReturn(Optional.empty());
-        when(categoryRepository.findAll()).thenReturn(List.of(category));
-
-        List<Category> result = categoryService.getAllCategory();
-
-        assertEquals(1, result.size());
-        verify(categoryRedisCache).putAll(List.of(category));
+        assertEquals(1, result.getContent().size());
+        assertEquals("Electronics", result.getContent().get(0).getName());
+        assertEquals(1, result.getTotalElements());
     }
 
     @Test
@@ -112,7 +109,7 @@ class CategoryServiceTest {
         category.setId(1L);
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
 
-        Category result = categoryService.getCategoryById(1L);
+        GetCategoryResponseDto result = categoryService.getCategoryById(1L);
 
         assertEquals("Test Category", result.getName());
         assertEquals(1L, result.getId());
@@ -128,10 +125,20 @@ class CategoryServiceTest {
     @Test
     void deleteCategory_deletesWhenCategoryExists() {
         when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(productRepository.existsByCategory_Id(1L)).thenReturn(false);
 
         categoryService.deleteCategory(1L);
 
         verify(categoryRepository).deleteById(1L);
+    }
+
+    @Test
+    void deleteCategory_whenCategoryHasProducts_throwsInvalidRequestAndKeepsIt() {
+        when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(productRepository.existsByCategory_Id(1L)).thenReturn(true);
+
+        assertThrows(InvalidRequestException.class, () -> categoryService.deleteCategory(1L));
+        verify(categoryRepository, never()).deleteById(any());
     }
 
     @Test
@@ -153,7 +160,7 @@ class CategoryServiceTest {
         when(categoryRepository.findByNameIgnoreCase("Updated Name")).thenReturn(Optional.empty());
         when(categoryRepository.save(existing)).thenReturn(updated);
 
-        Category result = categoryService.updateCategory(1L, dto);
+        GetCategoryResponseDto result = categoryService.updateCategory(1L, dto);
 
         assertEquals("Updated Name", result.getName());
     }

@@ -2,55 +2,48 @@ package com.example.nexusCommerce.adapters;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
-import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 
-import lombok.RequiredArgsConstructor;
-
 @Component
-@RequiredArgsConstructor
 public class OrderAdapter {
 
-    private final OrderProductsRepository orderProductsRepository;
-
-    public List<GetOrderResponseDto> mapToGetOrderResponseDtoList(List<Order> orders){
+    // Pure mapping: the caller supplies the line items so no query runs per order while
+    // a list is rendered.
+    public List<GetOrderResponseDto> mapToGetOrderResponseDtoList(List<Order> orders,
+                                                                 Map<Long, List<OrderProducts>> itemsByOrderId) {
         return orders.stream()
-                .map(order -> mapToGetOrderResponseDto(order))
+                .map(order -> mapToGetOrderResponseDto(order, itemsByOrderId.getOrDefault(order.getId(), List.of())))
                 .collect(Collectors.toList());
     }
-    
-    public GetOrderResponseDto mapToGetOrderResponseDto(Order order){
 
-        List<OrderProducts> orderProducts = orderProductsRepository.findByOrderId(order.getId());
-        List<OrderItemResponseDto> items = mapToOrderItemResponseDto(orderProducts);
-
+    public GetOrderResponseDto mapToGetOrderResponseDto(Order order, List<OrderProducts> orderProducts) {
         return GetOrderResponseDto.builder()
                 .id(order.getId())
+                .userId(order.getUser().getId())
                 .orderStatus(order.getStatus())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
-                .items(items)
+                .items(mapToOrderItemResponseDto(orderProducts))
                 .build();
-        
     }
 
-    public List<OrderItemResponseDto> mapToOrderItemResponseDto(List<OrderProducts> orderProducts){
-        
+    public List<OrderItemResponseDto> mapToOrderItemResponseDto(List<OrderProducts> orderProducts) {
         return orderProducts.stream()
                 .map(op -> OrderItemResponseDto.builder()
-                        .productId(op.getProduct().getId())
+                        .productId(op.getProductId())
                         .quantity(op.getQuantity())
-                        .productName(op.getProduct().getTitle())
-                        .productPrice(op.getProduct().getPrice())
-                        .productImage(op.getProduct().getImage())
-                        .subTotal(op.getProduct().getPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
+                        .productName(op.getProductName())
+                        .productPrice(op.getUnitPrice())
+                        .productImage(op.getProductImage())
+                        .subTotal(op.getUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
                         .build()).collect(Collectors.toList());
     }
 }

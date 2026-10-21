@@ -15,8 +15,9 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.domain.Pageable;
 
-import com.example.nexusCommerce.configs.TestJpaConfig;
+import com.example.nexusCommerce.configs.JpaAuditingConfig;
 import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Order;
@@ -24,10 +25,11 @@ import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Review;
+import com.example.nexusCommerce.schema.User;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
-@Import(TestJpaConfig.class)
+@Import(JpaAuditingConfig.class)
 class ReviewRepositoryTest {
 
     @Autowired
@@ -59,21 +61,28 @@ class ReviewRepositoryTest {
                 .rating(BigDecimal.valueOf(4.8))
                 .category(category)
                 .build();
-        firstOrder = Order.builder().status(OrderStatus.DELIVERED).build();
-        secondOrder = Order.builder().status(OrderStatus.DELIVERED).build();
+        User user = User.builder()
+                .name("Test User")
+                .email("test@example.com")
+                .passwordHash("hashed")
+                .build();
+        firstOrder = Order.builder().status(OrderStatus.DELIVERED).user(user).build();
+        secondOrder = Order.builder().status(OrderStatus.DELIVERED).user(user).build();
 
         testEntityManager.persistAndFlush(category);
+        testEntityManager.persistAndFlush(user);
         testEntityManager.persistAndFlush(phone);
         testEntityManager.persistAndFlush(laptop);
         testEntityManager.persistAndFlush(firstOrder);
         testEntityManager.persistAndFlush(secondOrder);
 
         testEntityManager.persistAndFlush(
-                OrderProducts.builder().order(firstOrder).product(phone).quantity(1).build());
+                OrderProducts.builder().order(firstOrder).product(phone).quantity(1).unitPrice(phone.getPrice()).productName(phone.getTitle()).build());
         testEntityManager.persistAndFlush(
-                OrderProducts.builder().order(secondOrder).product(laptop).quantity(1).build());
+                OrderProducts.builder().order(secondOrder).product(laptop).quantity(1).unitPrice(laptop.getPrice()).productName(laptop.getTitle()).build());
 
         phoneReview = Review.builder()
+                .user(user)
                 .order(firstOrder)
                 .product(phone)
                 .rating(BigDecimal.valueOf(8.5))
@@ -85,7 +94,7 @@ class ReviewRepositoryTest {
 
     @Test
     void findByProductId_returnsReviewsForProduct() {
-        List<Review> result = reviewRepository.findByProductId(phone.getId());
+        List<Review> result = reviewRepository.findByProductId(phone.getId(), Pageable.unpaged()).getContent();
 
         assertEquals(1, result.size());
         assertEquals("Great phone", result.get(0).getComment());
@@ -94,7 +103,7 @@ class ReviewRepositoryTest {
 
     @Test
     void findByOrderId_returnsReviewsForOrder() {
-        List<Review> result = reviewRepository.findByOrderId(firstOrder.getId());
+        List<Review> result = reviewRepository.findByOrderId(firstOrder.getId(), Pageable.unpaged()).getContent();
 
         assertEquals(1, result.size());
         assertEquals(firstOrder.getId(), result.get(0).getOrder().getId());

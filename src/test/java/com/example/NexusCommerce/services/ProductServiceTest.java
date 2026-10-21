@@ -1,48 +1,57 @@
 package com.example.nexusCommerce.services;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
+import com.example.nexusCommerce.adapters.ProductAdapter;
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
+import com.example.nexusCommerce.repositories.CategoryRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
-import com.example.nexusCommerce.services.CategoryService;
-import com.example.nexusCommerce.services.ProductService;
-import com.example.nexusCommerce.services.cache.ProductRedisCache;
+import com.example.nexusCommerce.utils.PageResponse;
+import com.example.nexusCommerce.utils.Pagination;
 
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
 
     @Mock
-    private CategoryService categoryService;
-
-    @Mock
     private ProductRepository productRepository;
 
     @Mock
-    private ProductRedisCache productRedisCache;
+    private CategoryRepository categoryRepository;
+
+    @Spy
+    private ProductAdapter productAdapter = new ProductAdapter();
 
     @InjectMocks
-    private ProductService productService;
+    private ProductServiceImpl productService;
 
     private Product sampleProduct() {
         Category category = Category.builder().name("Electronics").build();
@@ -59,83 +68,62 @@ class ProductServiceTest {
         return product;
     }
 
-    @Test
-    void getAllProducts_whenCacheHit_returnsCachedProducts() {
-        GetProductResponseDto dto = GetProductResponseDto.builder()
-                .id(1L)
-                .title("iPhone")
-                .price(BigDecimal.valueOf(80000))
-                .rating(BigDecimal.valueOf(4.5))
-                .build();
-        when(productRedisCache.getAllSummaries()).thenReturn(Optional.of(List.of(dto)));
-
-        List<GetProductResponseDto> result = productService.getAllProducts();
-
-        assertEquals(1, result.size());
-        assertEquals("iPhone", result.get(0).getTitle());
-        verify(productRepository, never()).findAll();
+    private <T> Page<T> page(List<T> content) {
+        return new PageImpl<>(content, PageRequest.of(0, 20), content.size());
     }
 
     @Test
-    void getAllProducts_whenCacheMiss_loadsFromRepositoryAndCaches() {
-        Product product = sampleProduct();
-        when(productRedisCache.getAllSummaries()).thenReturn(Optional.empty());
-        when(productRepository.findAll()).thenReturn(List.of(product));
+    void getAllProducts_mapsPageOfProductsToDtos() {
+        when(productRepository.findAll(any(Pageable.class))).thenReturn(page(List.of(sampleProduct())));
 
-        List<GetProductResponseDto> result = productService.getAllProducts();
+        PageResponse<GetProductResponseDto> result = productService.getAllProducts(0, 20);
 
-        assertEquals(1, result.size());
-        assertEquals("iPhone", result.get(0).getTitle());
-        verify(productRedisCache).putAllSummaries(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("iPhone", result.getContent().get(0).getTitle());
+        assertEquals(BigDecimal.valueOf(80000), result.getContent().get(0).getPrice());
+        assertEquals(1, result.getTotalElements());
+        assertTrue(result.isLast());
     }
 
     @Test
-    void getProductById_whenCacheHit_returnsCachedProduct() {
-        GetProductResponseDto dto = GetProductResponseDto.builder().id(1L).title("iPhone").build();
-        when(productRedisCache.getSummary(1L)).thenReturn(Optional.of(dto));
+    void getAllProducts_clampsOversizedPageRequest() {
+        when(productRepository.findAll(any(Pageable.class))).thenReturn(page(List.of()));
+
+        productService.getAllProducts(0, 100_000);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(productRepository).findAll(captor.capture());
+        assertEquals(Pagination.MAX_SIZE, captor.getValue().getPageSize());
+    }
+
+    @Test
+    void getProductById_returnsMappedProduct() {
+        when(productRepository.findById(1L)).thenReturn(Optional.of(sampleProduct()));
 
         GetProductResponseDto result = productService.getProductById(1L);
 
         assertEquals("iPhone", result.getTitle());
-        verify(productRepository, never()).findById(1L);
-    }
-
-    @Test
-    void getProductById_whenCacheMiss_loadsFromRepositoryAndCaches() {
-        Product product = sampleProduct();
-        when(productRedisCache.getSummary(1L)).thenReturn(Optional.empty());
-        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
-
-        GetProductResponseDto result = productService.getProductById(1L);
-
-        assertEquals("iPhone", result.getTitle());
-        verify(productRedisCache).putSummary(1L, result);
     }
 
     @Test
     void getProductById_whenNotFound_throwsResourceNotFoundException() {
-        when(productRedisCache.getSummary(1L)).thenReturn(Optional.empty());
         when(productRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> productService.getProductById(1L));
     }
 
     @Test
-    void getProductWithDetailsById_whenCacheMiss_returnsProductWithCategory() {
-        Product product = sampleProduct();
-        when(productRedisCache.getDetails(1L)).thenReturn(Optional.empty());
-        when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of(product));
+    void getProductWithDetailsById_returnsProductWithCategory() {
+        when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of(sampleProduct()));
 
         GetProductWithDetailsResponseDto result = productService.getProductWithDetailsById(1L);
 
         assertEquals("iPhone", result.getTitle());
         assertEquals("Electronics", result.getCategory());
-        verify(productRedisCache).putDetails(1L, result);
     }
 
     @Test
     void getProductWithDetailsById_whenNotFound_throwsResourceNotFoundException() {
-        when(productRedisCache.getDetails(1L)).thenReturn(Optional.empty());
         when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of());
 
         assertThrows(ResourceNotFoundException.class, () -> productService.getProductWithDetailsById(1L));
@@ -155,26 +143,14 @@ class ProductServiceTest {
                 .build();
         Product saved = sampleProduct();
 
-        when(categoryService.getCategoryById(1L)).thenReturn(category);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(productRepository.existsByTitleIgnoreCase("iPhone")).thenReturn(false);
         when(productRepository.save(any(Product.class))).thenReturn(saved);
 
-        Product result = productService.createProduct(dto);
+        GetProductResponseDto result = productService.createProduct(dto);
 
         assertEquals("iPhone", result.getTitle());
-        assertEquals("Electronics", result.getCategory().getName());
-    }
-
-    @Test
-    void createProduct_whenTitleBlank_throwsInvalidRequestException() {
-        CreateProductRequestDto dto = CreateProductRequestDto.builder()
-                .title("  ")
-                .price(BigDecimal.TEN)
-                .rating(BigDecimal.ONE)
-                .categoryId(1L)
-                .build();
-
-        assertThrows(InvalidRequestException.class, () -> productService.createProduct(dto));
+        assertEquals(BigDecimal.valueOf(80000), result.getPrice());
     }
 
     @Test
@@ -188,7 +164,7 @@ class ProductServiceTest {
         Category category = Category.builder().name("Electronics").build();
         category.setId(1L);
 
-        when(categoryService.getCategoryById(1L)).thenReturn(category);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
         when(productRepository.existsByTitleIgnoreCase("iPhone")).thenReturn(true);
 
         assertThrows(DuplicateResourceException.class, () -> productService.createProduct(dto));
@@ -203,8 +179,7 @@ class ProductServiceTest {
                 .categoryId(99L)
                 .build();
 
-        when(categoryService.getCategoryById(99L))
-                .thenThrow(new ResourceNotFoundException("Category with id: 99 Not Found!"));
+        when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> productService.createProduct(dto));
     }
@@ -227,29 +202,30 @@ class ProductServiceTest {
 
     @Test
     void findByCategory_whenCategoryBlank_throwsInvalidRequestException() {
-        assertThrows(InvalidRequestException.class, () -> productService.findByCategory("  "));
+        assertThrows(InvalidRequestException.class, () -> productService.findByCategory("  ", 0, 20));
     }
 
     @Test
-    void findByCategory_whenCacheMiss_loadsFromRepositoryAndCaches() {
-        Product product = sampleProduct();
-        when(productRedisCache.getByCategory("Electronics")).thenReturn(Optional.empty());
-        when(productRepository.findByCategory_NameIgnoreCase("Electronics")).thenReturn(List.of(product));
+    void findByCategory_returnsTrimmedLookupWithCategoryNames() {
+        when(categoryRepository.findByNameIgnoreCase("Electronics"))
+                .thenReturn(Optional.of(Category.builder().name("Electronics").build()));
+        when(productRepository.findByCategory_NameIgnoreCase(eq("Electronics"), any(Pageable.class)))
+                .thenReturn(page(List.of(sampleProduct())));
 
-        List<Product> result = productService.findByCategory("  Electronics  ");
+        PageResponse<GetProductWithDetailsResponseDto> result =
+                productService.findByCategory("  Electronics  ", 0, 20);
 
-        assertEquals(1, result.size());
-        verify(productRedisCache).putByCategory("Electronics", result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("iPhone", result.getContent().get(0).getTitle());
+        assertEquals("Electronics", result.getContent().get(0).getCategory());
     }
 
     @Test
-    void getUniqueCategories_whenCacheMiss_loadsFromRepositoryAndCaches() {
-        when(productRedisCache.getUniqueCategories()).thenReturn(Optional.empty());
-        when(productRepository.findUniqueCategory()).thenReturn(List.of("Electronics", "Books"));
+    void getUniqueCategories_filtersNullCategoryNames() {
+        when(productRepository.findUniqueCategory()).thenReturn(Arrays.asList("Electronics", "Books", null));
 
         List<String> result = productService.getUniqueCategories();
 
         assertEquals(2, result.size());
-        verify(productRedisCache).putUniqueCategories(result);
     }
 }

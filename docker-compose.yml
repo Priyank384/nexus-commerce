@@ -42,10 +42,48 @@ services:
       - elk-network
     volumes:
       - ./logstash/:/logstash_dir
+      - logstash_data:/usr/share/logstash/data
     command: logstash -f /logstash_dir/pipeline/logstash.conf
-  
+
+  # The response cache needs Redis. Values come from the same .env the app reads,
+  # so redis_port stays consistent between the two.
+  redis:
+    image: redis:7.4-alpine
+    container_name: nexus-redis
+    restart: always
+    ports:
+      - "${redis_port:-6379}:6379"
+    # Cache entries all have a TTL, so evicting least-recently-used keys is safe here
+    # and keeps the container bounded instead of growing until Redis starts erroring.
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - elk-network
+
+  # Only for a fully containerised setup: application.yml currently points at the
+  # MySQL already running on localhost:3306, so leave this scaled down to avoid a
+  # port clash. Use `docker compose up mysql` if you want to switch to it.
+  mysql:
+    image: mysql:9.6
+    container_name: nexus-mysql
+    profiles: ["local-db"]
+    restart: always
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${password}
+      MYSQL_DATABASE: nexuscommerce
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - elk-network
+
 volumes:
   elasticsearch_data: {}
+  logstash_data: {}
+  redis_data: {}
+  mysql_data: {}
 networks:
   elk-network:
     driver: bridge

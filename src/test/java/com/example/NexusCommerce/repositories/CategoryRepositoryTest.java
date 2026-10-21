@@ -14,13 +14,13 @@ import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabas
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 
-import com.example.nexusCommerce.configs.TestJpaConfig;
+import com.example.nexusCommerce.configs.JpaAuditingConfig;
 import com.example.nexusCommerce.repositories.CategoryRepository;
 import com.example.nexusCommerce.schema.Category;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
-@Import(TestJpaConfig.class)
+@Import(JpaAuditingConfig.class)
 class CategoryRepositoryTest {
 
     @Autowired

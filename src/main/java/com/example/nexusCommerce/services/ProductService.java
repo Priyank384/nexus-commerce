@@ -1,169 +1,21 @@
 package com.example.nexusCommerce.services;
 
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.stream.Collectors;
-
-import org.springframework.stereotype.Service;
 
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
-import com.example.nexusCommerce.exceptions.DuplicateResourceException;
-import com.example.nexusCommerce.exceptions.InvalidRequestException;
-import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
-import com.example.nexusCommerce.repositories.ProductRepository;
-import com.example.nexusCommerce.schema.Category;
-import com.example.nexusCommerce.schema.Product;
-import com.example.nexusCommerce.services.cache.ProductRedisCache;
+import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
+import com.example.nexusCommerce.utils.PageResponse;
 
-import lombok.RequiredArgsConstructor;
-
-@Service
-@RequiredArgsConstructor
-public class ProductService {
-
-    private final CategoryService categoryService;
-    private final ProductRepository productRepository;
-    private final ProductRedisCache productRedisCache;
-
-    public List<GetProductResponseDto> getAllProducts() {
-        Optional<List<GetProductResponseDto>> cached = productRedisCache.getAllSummaries();
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        List<GetProductResponseDto> products = productRepository.findAll()
-                .stream()
-                .map(this::toGetProductResponseDto)
-                .collect(Collectors.toList());
-
-        productRedisCache.putAllSummaries(products);
-        return products;
-    }
-
-    public GetProductResponseDto getProductById(Long id){
-
-        Optional<GetProductResponseDto> cachedSummary = productRedisCache.getSummary(id);
-        if(cachedSummary.isPresent()){
-            return cachedSummary.get();
-        }
-        
-        GetProductResponseDto response =  productRepository.findById(id)
-                .map(this::toGetProductResponseDto)
-                .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
-
-        productRedisCache.putSummary(id, response);
-        return response;
-    }
-
-    public GetProductWithDetailsResponseDto getProductWithDetailsById(Long id){
-        Optional<GetProductWithDetailsResponseDto> cached = productRedisCache.getDetails(id);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        Product product = productRepository.findProductWithDetailsById(id)
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
-
-        GetProductWithDetailsResponseDto response = GetProductWithDetailsResponseDto.builder()
-                .id(product.getId())
-                .title(product.getTitle())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .image(product.getImage())
-                .rating(product.getRating())
-                .category(product.getCategory().getName())
-                .build();
-
-        productRedisCache.putDetails(id, response);
-        return response;
-    }
-
-    public Product createProduct(CreateProductRequestDto requestDto){
-        validateCreateProductRequest(requestDto);
-        Category newcategory = categoryService.getCategoryById(requestDto.getCategoryId());
-
-        if (productRepository.existsByTitleIgnoreCase(requestDto.getTitle())) {
-            throw new DuplicateResourceException("Product with name '" + requestDto.getTitle() + "' already exists!");
-        }
-
-        Product newProduct = Product.builder()
-                            .title(requestDto.getTitle().trim())
-                            .category(newcategory)
-                            .description(requestDto.getDescription())
-                            .image(requestDto.getImage())
-                            .price(requestDto.getPrice())
-                            .rating(requestDto.getRating()).build();
-
-        return productRepository.save(newProduct);
-    }
-    public void deleteProduct(Long id){
-        if (!productRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Product with id: " + id + " Not Found!");
-        }
-        productRepository.deleteById(id);
-    }
-    public List<Product>findByCategory(String category){
-        if (category == null || category.isBlank()) {
-            throw new InvalidRequestException("Category name must not be blank!");
-        }
-        String normalizedCategory = category.trim();
-
-        Optional<List<Product>> cached = productRedisCache.getByCategory(normalizedCategory);
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        List<Product> products = productRepository.findByCategory_NameIgnoreCase(normalizedCategory);
-        productRedisCache.putByCategory(normalizedCategory, products);
-        return products;
-    }
-
-    public List<String> getUniqueCategories() {
-        Optional<List<String>> cached = productRedisCache.getUniqueCategories();
-        if (cached.isPresent()) {
-            return cached.get();
-        }
-
-        List<String> categories = productRepository.findUniqueCategory()
-                .stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        productRedisCache.putUniqueCategories(categories);
-        return categories;
-    }
-
-    private GetProductResponseDto toGetProductResponseDto(Product product) {
-        return GetProductResponseDto.builder()
-                .id(product.getId())
-                .title(product.getTitle())
-                .description(product.getDescription())
-                .price(product.getPrice())
-                .image(product.getImage())
-                .rating(product.getRating())
-                .build();
-    }
-
-    private void validateCreateProductRequest(CreateProductRequestDto requestDto) {
-        if (requestDto == null) {
-            throw new InvalidRequestException("Request body must not be null!");
-        }
-        if (requestDto.getTitle() == null || requestDto.getTitle().isBlank()) {
-            throw new InvalidRequestException("Product title must not be blank!");
-        }
-        if (requestDto.getPrice() == null) {
-            throw new InvalidRequestException("Product price must not be null!");
-        }
-        if (requestDto.getRating() == null) {
-            throw new InvalidRequestException("Product rating must not be null!");
-        }
-        if (requestDto.getCategoryId() == null) {
-            throw new InvalidRequestException("Category id must not be null!");
-        }
-    }
+public interface ProductService {
+    PageResponse<GetProductResponseDto> getAllProducts(int page, int size);
+    GetProductResponseDto getProductById(Long id);
+    GetProductWithDetailsResponseDto getProductWithDetailsById(Long id);
+    GetProductResponseDto createProduct(CreateProductRequestDto requestDto);
+    GetProductResponseDto updateProduct(Long id, UpdateProductRequestDto requestDto);
+    GetProductResponseDto setStock(Long id, Integer stock);
+    void deleteProduct(Long id);
+    PageResponse<GetProductWithDetailsResponseDto> findByCategory(String category, int page, int size);
+    List<String> getUniqueCategories();
 }

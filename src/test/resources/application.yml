@@ -9,4 +9,9 @@ spring:
   show-sql: true
   flyway:
     enabled: false
+
+app:
+  jwt:
+    secret: nexuscommerce-test-only-secret-key-not-for-production-0123456789abcdef
+    expiration-minutes: 60
     
