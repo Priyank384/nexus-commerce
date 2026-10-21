@@ -5,6 +5,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import com.example.nexusCommerce.repositories.UserRepository;
+import com.example.nexusCommerce.services.NotificationService;
+
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
@@ -14,12 +18,18 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class OrderEventListener {
+
+    private final NotificationService notifications;
+    private final UserRepository userRepository;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onOrderPlaced(OrderPlacedEvent event) {
         log.info("Order placed: id={} user={} at={}", event.orderId(), event.userId(), event.placedAt());
+        userRepository.findById(event.userId())
+                .ifPresent(u -> notifications.sendOrderConfirmation(u.getId(), event.orderId(), u.getEmail()));
     }
 
     @Async

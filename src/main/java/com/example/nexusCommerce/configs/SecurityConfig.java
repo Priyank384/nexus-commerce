@@ -47,6 +47,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/users").permitAll()
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                // Uploaded product images: browser loads them without a bearer token.
+                .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                 // Liveness/readiness probes are checked by the platform (k8s, LB) without credentials.
                 .requestMatchers("/actuator/health", "/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                 // All other actuator endpoints (metrics, prometheus, info) expose runtime detail.

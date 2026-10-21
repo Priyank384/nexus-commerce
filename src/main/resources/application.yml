@@ -39,6 +39,10 @@ spring:
     locations: classpath:db/migration 
   profiles:
     active: dev
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   data:
     redis:
       host: localhost
@@ -86,6 +90,10 @@ app:
     secret: ${JWT_SECRET:nexuscommerce-dev-only-secret-key-change-me-in-production-0123456789}
     expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
     refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:7}
+  upload:
+    # Local filesystem directory the multipart image endpoint stores files under.
+    # Swap to S3 (or similar) by replacing the storage bean, or mount a volume here in Docker.
+    dir: ${UPLOAD_DIR:uploads/products}
   rate-limit:
     login:
       max: ${LOGIN_RATE_MAX:10}

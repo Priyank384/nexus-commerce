@@ -43,3 +43,6 @@ out/
 # New Relic agent binary + runtime logs (keep newrelic.yml tracked for config template)
 newrelic/logs/
 newrelic/newrelic.jar
+
+# Local uploads (multipart product images stored on the filesystem)
+uploads/

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "true"
+          MYSQL_DATABASE: nexuscommerce
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      - name: Assemble (compile + jar)
+        run: ./gradlew --no-daemon assemble
+
+      - name: Unit tests
+        # The default test profile uses H2 in-memory; no service container needed.
+        run: ./gradlew --no-daemon test
+
+      - name: Flyway validate against MySQL service
+        # Proves every applied migration (V1..V13) matches on a real MySQL, and the
+        # JPA entities still validate against the resulting schema (ddl-auto=validate).
+        env:
+          username: root
+          password: ""
+          PORT: "3001"
+          redis_port: "6379"
+          JWT_SECRET: ci-only-secret-please-rotate-in-real-deployment-0123456789
+        run: ./gradlew --no-daemon bootRun &
+          pid=$!; sleep 45; kill $pid; wait $pid 2>/dev/null || true

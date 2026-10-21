@@ -16,6 +16,7 @@ import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.dtos.SetStockRequestDto;
 import com.example.nexusCommerce.dtos.UpdateUserRequestDto;
 import com.example.nexusCommerce.services.AdminService;
+import com.example.nexusCommerce.services.ProductImageUploadService;
 import com.example.nexusCommerce.services.ProductService;
 import com.example.nexusCommerce.utils.ApiResponse;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -23,6 +24,9 @@ import com.example.nexusCommerce.utils.Pagination;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +39,7 @@ public class AdminController {
 
     private final AdminService adminService;
     private final ProductService productService;
+    private final ProductImageUploadService imageUploadService;
 
     @Operation(summary = "Dashboard metrics",
                description = "Aggregate counts, revenue, order-status distribution and out-of-stock catalogue. Requires ROLE_ADMIN.")
@@ -75,5 +80,15 @@ public class AdminController {
             @PathVariable Long id, @Valid @RequestBody SetStockRequestDto requestDto) {
         GetProductResponseDto product = productService.setStock(id, requestDto.getStock());
         return ResponseEntity.ok(ApiResponse.success(product, "Stock updated successfully"));
+    }
+
+    @Operation(summary = "Upload a product image",
+               description = "Accepts a PNG/JPEG/WebP file up to 5 MB, stores it locally under "
+                             + "${app.upload.dir} and rewrites the product's image URL. Requires ROLE_ADMIN.")
+    @PostMapping("/products/{id}/image")
+    public ResponseEntity<ApiResponse<String>> uploadImage(
+            @PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        String url = imageUploadService.upload(id, file);
+        return ResponseEntity.ok(ApiResponse.success(url, "Image uploaded"));
     }
 }
