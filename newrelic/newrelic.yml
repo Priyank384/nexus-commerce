@@ -9,11 +9,11 @@
 common: &default_settings
 
   # ============================== LICENSE KEY ===============================
-  # You must specify the license key associated with your New Relic
-  # account. For example, if your license key is 12345 use this:
-  # license_key: '12345'
-  # The key binds your agent's data to your account in the New Relic UI.
-  license_key: '6b205b06f726723f694f6683ec9defd3e158NRAL'
+  # Supply the key via the NEW_RELIC_LICENSE_KEY environment variable (or
+  # -Dnewrelic.config.license_key=... at JVM start). The Java agent falls back
+  # to the env var whenever this field is blank or absent, so the key never has
+  # to live in the file. Never commit a real key here.
+  # license_key: ''
 
   # Agent enabled
   # Use this setting to disable the agent instead of removing it from the startup command.
