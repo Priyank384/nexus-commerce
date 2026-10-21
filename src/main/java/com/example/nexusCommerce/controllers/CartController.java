@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,6 +19,7 @@ import com.example.nexusCommerce.dtos.CreateOrderRequestDto;
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.UpdateCartItemRequestDto;
 import com.example.nexusCommerce.security.AuthenticatedUser;
+import com.example.nexusCommerce.security.IdempotencyService;
 import com.example.nexusCommerce.services.CartService;
 import com.example.nexusCommerce.utils.ApiResponse;
 
@@ -33,6 +35,9 @@ import lombok.RequiredArgsConstructor;
 public class CartController {
 
     private final CartService cartService;
+    private final IdempotencyService idempotency;
+
+    private static final String CHECKOUT_IDEM_SCOPE = "cart-checkout";
 
     @Operation(summary = "Get my cart",
                description = "Returns the caller's cart; creates an empty one on first access.")
@@ -81,13 +86,30 @@ public class CartController {
 
     @Operation(summary = "Checkout the cart",
                description = "Converts the cart into an order (stock reserved atomically, snapshots written) and empties the cart. "
-                             + "Optionally send a body to override the line items; omit it to use the cart as-is.")
+                             + "Optionally send a body to override the line items; omit it to use the cart as-is. "
+                             + "Send an Idempotency-Key header to make retries safe: a repeat of the same key replays the first response "
+                             + "instead of placing a duplicate order.")
     @PostMapping("/checkout")
     public ResponseEntity<ApiResponse<GetOrderResponseDto>> checkout(
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody(required = false) CreateOrderRequestDto override,
             @AuthenticationPrincipal AuthenticatedUser caller) {
-        GetOrderResponseDto order = cartService.checkout(caller.id(), override);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success(order, "Order placed from cart"));
+        boolean useIdem = idempotencyKey != null && !idempotencyKey.isBlank();
+        if (useIdem) {
+            var cached = idempotency.tryStart(caller.id(), CHECKOUT_IDEM_SCOPE, idempotencyKey);
+            if (cached.isPresent()) {
+                return ResponseEntity.status(HttpStatus.CREATED).body(cached.get());
+            }
+        }
+        GetOrderResponseDto order;
+        try {
+            order = cartService.checkout(caller.id(), override);
+        } catch (RuntimeException ex) {
+            if (useIdem) idempotency.release(caller.id(), CHECKOUT_IDEM_SCOPE, idempotencyKey);
+            throw ex;
+        }
+        ApiResponse<GetOrderResponseDto> body = ApiResponse.success(order, "Order placed from cart");
+        if (useIdem) idempotency.complete(caller.id(), CHECKOUT_IDEM_SCOPE, idempotencyKey, body);
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 }

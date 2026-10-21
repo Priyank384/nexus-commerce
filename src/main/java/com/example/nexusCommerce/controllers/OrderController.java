@@ -41,6 +41,8 @@ public class OrderController {
     private final OrderService orderService;
     private final IdempotencyService idempotency;
 
+    private static final String IDEM_SCOPE = "orders";
+
     @Operation(summary = "List all orders",
                description = "Paged list across all users. Requires ROLE_ADMIN.")
     @GetMapping
@@ -61,7 +63,7 @@ public class OrderController {
             @AuthenticationPrincipal AuthenticatedUser caller) {
         boolean useIdem = idempotencyKey != null && !idempotencyKey.isBlank();
         if (useIdem) {
-            var cached = idempotency.tryStart(idempotencyKey);
+            var cached = idempotency.tryStart(caller.id(), IDEM_SCOPE, idempotencyKey);
             if (cached.isPresent()) {
                 return ResponseEntity.status(HttpStatus.CREATED).body(cached.get());
             }
@@ -70,12 +72,12 @@ public class OrderController {
         try {
             order = orderService.createOrder(requestDto, caller.id());
         } catch (RuntimeException ex) {
-            if (useIdem) idempotency.release(idempotencyKey);
+            if (useIdem) idempotency.release(caller.id(), IDEM_SCOPE, idempotencyKey);
             throw ex;
         }
         ApiResponse<GetOrderResponseDto> body =
                 ApiResponse.success(order, "Order Created Successfully");
-        if (useIdem) idempotency.complete(idempotencyKey, body);
+        if (useIdem) idempotency.complete(caller.id(), IDEM_SCOPE, idempotencyKey, body);
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
 
