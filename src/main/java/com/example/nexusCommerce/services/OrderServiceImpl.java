@@ -55,6 +55,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderAdapter orderAdapter;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final org.springframework.context.ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = ORDER_ALL, key = "#page + ':' + #size", sync = true)
@@ -176,6 +177,8 @@ public class OrderServiceImpl implements OrderService {
 
         // The line items are already in the persistence context with products resolved,
         // so the response costs no extra query.
+        events.publishEvent(new com.example.nexusCommerce.events.OrderPlacedEvent(
+                order.getId(), order.getUser().getId(), java.time.Instant.now()));
         return orderAdapter.mapToGetOrderResponseDto(order, savedItems);
     }
 
