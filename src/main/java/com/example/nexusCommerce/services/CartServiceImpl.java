@@ -38,7 +38,14 @@ public class CartServiceImpl implements CartService {
     @Transactional(readOnly = true)
     @Override
     public CartResponseDto getMyCart(Long userId) {
-        return toResponse(findOrCreate(userId));
+        return cartRepository.findByUserId(userId)
+                .map(this::toResponse)
+                .orElseGet(() -> CartResponseDto.builder()
+                        .userId(userId)
+                        .items(List.of())
+                        .grandTotal(BigDecimal.ZERO)
+                        .itemCount(0)
+                        .build());
     }
 
     @Transactional
@@ -102,7 +109,7 @@ public class CartServiceImpl implements CartService {
                 && !override.getOrderItems().isEmpty())
                 ? override.getOrderItems()
                 : cart.getItems().stream()
-                        .map(i -> new OrderItemRequestDto(i.getProductId(), i.getQuantity()))
+                        .map(i -> new OrderItemRequestDto(i.getProduct().getId(), i.getQuantity()))
                         .toList();
         CreateOrderRequestDto request = new CreateOrderRequestDto();
         request.setOrderItems(items);
@@ -128,7 +135,7 @@ public class CartServiceImpl implements CartService {
                     BigDecimal qty = BigDecimal.valueOf(i.getQuantity());
                     return CartItemResponseDto.builder()
                             .id(i.getId())
-                            .productId(i.getProductId())
+                            .productId(i.getProduct().getId())
                             .productName(i.getProduct().getTitle())
                             .productImage(i.getProduct().getImage())
                             .unitPrice(unit)
