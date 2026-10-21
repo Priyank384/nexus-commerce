@@ -58,5 +58,11 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 tasks.named('bootRun'){
-	jvmArgs=['-javaagent:newrelic/newrelic.jar']
+	// Only attach the New Relic agent when the jar is present locally. It's gitignored
+	// (binary artifact), so CI/Docker images will run bootRun without it and the JVM
+	// would otherwise abort with "agent library failed Agent_OnLoad: instrument".
+	def nrAgent = file('newrelic/newrelic.jar')
+	if (nrAgent.exists()) {
+		jvmArgs "-javaagent:${nrAgent.absolutePath}"
+	}
 }
