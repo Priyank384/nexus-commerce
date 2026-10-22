@@ -1,5 +1,7 @@
 package com.example.nexusCommerce.controllers;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
+import com.example.nexusCommerce.dtos.GetCategoryNodeResponseDto;
 import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
 import com.example.nexusCommerce.services.CategoryService;
 import com.example.nexusCommerce.utils.ApiResponse;
@@ -31,6 +34,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class CategoryController {
     
     private final CategoryService categoryService;
+
+    @Operation(summary = "Get the category tree",
+               description = "Top-level categories with their subcategories nested one level deep, in one "
+                             + "response. This is what the storefront nav renders; the flat list endpoint "
+                             + "stays for admin grids. Public; cached.")
+    @GetMapping("/tree")
+    public ResponseEntity<ApiResponse<List<GetCategoryNodeResponseDto>>> getCategoryTree(){
+        return ResponseEntity.ok(ApiResponse.success(categoryService.getCategoryTree(), "Category tree fetched successfully!"));
+    }
 
     @Operation(summary = "Create a category",
                description = "Adds a new category to the catalogue. Requires ROLE_ADMIN.")

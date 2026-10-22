@@ -1,6 +1,7 @@
 package com.example.nexusCommerce.repositories;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,13 @@ import com.example.nexusCommerce.schema.OrderStatus;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Page<Order> findByUser_Id(Long userId, Pageable pageable);
+
+    /**
+     * Resolves a gateway webhook (which arrives with no user context) back to our order.
+     * Matches only the intent we issued, so a forged reference can only ever name an order
+     * that actually exists here.
+     */
+    Optional<Order> findByPaymentIntentId(String paymentIntentId);
 
     long countByStatus(OrderStatus status);
 

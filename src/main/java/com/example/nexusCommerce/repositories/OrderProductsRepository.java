@@ -34,6 +34,15 @@ public interface  OrderProductsRepository extends JpaRepository<OrderProducts, L
     BigDecimal totalRevenue();
 
     /**
+     * What one order costs, straight from the price snapshots written at checkout. Aggregate
+     * instead of entity load: the payment path only needs a number, and the cart/checkout
+     * response has already paid for the line items elsewhere.
+     */
+    @Query("SELECT COALESCE(SUM(op.unitPrice * op.quantity), 0) FROM OrderProducts op "
+            + "WHERE op.order.id = :orderId")
+    BigDecimal totalByOrderId(@Param("orderId") Long orderId);
+
+    /**
      * Returns (variantId, productId, quantity) triples as scalars. Used to hand stock back
      * when an order is deleted without loading the OrderProducts entities into the persistence
      * context -- managed line items left referencing a soft-deleted Order make the commit

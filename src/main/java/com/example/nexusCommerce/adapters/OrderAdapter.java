@@ -29,25 +29,60 @@ public class OrderAdapter {
                 .id(order.getId())
                 .userId(order.getUser().getId())
                 .orderStatus(order.getStatus())
+                .totalPrice(totalOf(orderProducts))
+                .paymentStatus(order.getPaymentStatus())
+                .paidAt(order.getPaidAt())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .items(mapToOrderItemResponseDto(orderProducts))
                 .build();
     }
 
+    /**
+     * Summed from the line items already in hand rather than read from a column: the order
+     * table has no total, and a second aggregate query per rendered order would be paid by
+     * every list endpoint to reproduce arithmetic the snapshots already contain.
+     */
+    private static BigDecimal totalOf(List<OrderProducts> orderProducts) {
+        return orderProducts.stream()
+                .map(op -> op.getUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
     public List<OrderItemResponseDto> mapToOrderItemResponseDto(List<OrderProducts> orderProducts) {
         return orderProducts.stream()
                 .map(op -> OrderItemResponseDto.builder()
-                        .productId(op.getProductId())
+                        .productId(productIdOf(op))
                         .quantity(op.getQuantity())
                         .productName(op.getProductName())
                         .productPrice(op.getUnitPrice())
                         .productImage(op.getProductImage())
-                        .variantId(op.getVariantId())
+                        .variantId(variantIdOf(op))
                         .variantSize(op.getVariantSize())
                         .variantColorName(op.getVariantColorName())
                         .variantColorHex(op.getVariantColorHex())
                         .subTotal(op.getUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
                         .build()).collect(Collectors.toList());
+    }
+
+    /**
+     * product_id and variant_id are insertable=false views of their associations, so a line
+     * written moments ago (checkout, place order, add-to-order) has no scalar populated yet and
+     * would answer with nulls the storefront needs for "buy again". Reading the identifier off
+     * the association is free even for a lazy proxy, and for rows read from the database the
+     * scalar is already there.
+     */
+    private static Long productIdOf(OrderProducts line) {
+        if (line.getProductId() != null) {
+            return line.getProductId();
+        }
+        return line.getProduct() != null ? line.getProduct().getId() : null;
+    }
+
+    private static Long variantIdOf(OrderProducts line) {
+        if (line.getVariantId() != null) {
+            return line.getVariantId();
+        }
+        return line.getVariant() != null ? line.getVariant().getId() : null;
     }
 }

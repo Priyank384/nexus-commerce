@@ -138,6 +138,19 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("The request references an invalid or missing resource", "Invalid request!"));
     }
 
+    /**
+     * A gateway that is unconfigured, unreachable, or refused the request is a failure of the
+     * upstream, not of the caller: 502 keeps the 500 bucket reserved for real bugs here and
+     * still tells the storefront the shopper can retry.
+     */
+    @ExceptionHandler(PaymentProviderException.class)
+    public ResponseEntity<ApiResponse<Void>> handlePaymentProvider(PaymentProviderException ex){
+        log.warn("Payment provider failure: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.error(ex.getMessage(), "Payment provider unavailable!"));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleAllGeneralException(Exception ex){
         log.error("Unhandled exception", ex);

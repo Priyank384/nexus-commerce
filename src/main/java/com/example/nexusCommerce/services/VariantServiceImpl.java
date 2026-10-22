@@ -44,14 +44,6 @@ public class VariantServiceImpl implements VariantService {
     private final ProductRepository productRepository;
     private final ProductAdapter productAdapter;
 
-    @Transactional(readOnly = true)
-    @Override
-    public List<GetVariantResponseDto> listByProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + productId + " Not Found!"));
-        return productAdapter.mapToGetVariantResponseDtoList(
-                variantRepository.findByProductIdOrderBySizeAscColorNameAsc(productId), product.getPrice());
-    }
 
     @Transactional
     @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS,

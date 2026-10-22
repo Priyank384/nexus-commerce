@@ -202,7 +202,10 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.toList());
         for (String value : requested) {
             if (!allowed.contains(value)) {
-                throw new ResourceNotFoundException("No products are sold in " + label + " '" + value + "'");
+                // A value no product sells in is a bad request param, not a missing resource:
+                // rejecting it turns a storefront typo into an error instead of an empty page.
+                throw new InvalidRequestException(
+                        "No products are sold in " + label + " '" + value + "'");
             }
         }
     }

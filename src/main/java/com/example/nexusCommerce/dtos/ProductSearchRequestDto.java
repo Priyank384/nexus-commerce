@@ -8,7 +8,6 @@ import java.util.Locale;
 import java.util.Set;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -19,7 +18,6 @@ import lombok.NoArgsConstructor;
  * Redis entry for an identical result set.
  */
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProductSearchRequestDto {
@@ -35,9 +33,10 @@ public class ProductSearchRequestDto {
     private BigDecimal minPrice;
     private BigDecimal maxPrice;
     private String sort;
-    @Builder.Default
+    // Field initializers are the only defaults this DTO has, and it is deliberately built by
+    // the no-args constructor that query-param binding uses: a @Builder here would mean a
+    // @Builder.Default value the HTTP path never applies, so size would silently be 0.
     private int page = 0;
-    @Builder.Default
     private int size = 20;
 
     public String normalizedGender() {

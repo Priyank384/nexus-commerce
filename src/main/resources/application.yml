@@ -101,6 +101,17 @@ app:
       max: ${LOGIN_RATE_MAX:10}
       window-seconds: ${LOGIN_RATE_WINDOW_SECONDS:60}
 
+razorpay:
+  # Empty defaults keep the app bootable (and the test suite green) without credentials; the
+  # payment endpoints answer 502 with an actionable message until they are supplied.
+  # Values come from .env: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET.
+  base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com/v1}
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  # Must match the secret entered in the Razorpay dashboard for this webhook endpoint.
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  currency: ${RAZORPAY_CURRENCY:INR}
+
 springdoc:
   swagger-ui:
     # Deterministic, tidy layout in the UI: alphabetical tag groups and operations.

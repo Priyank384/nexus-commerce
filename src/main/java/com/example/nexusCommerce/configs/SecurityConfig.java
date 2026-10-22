@@ -56,6 +56,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/products", "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/categories/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/reviews", "/api/v1/reviews/**").permitAll()
+                // Razorpay's server-to-server callback carries no bearer token; it proves
+                // itself with an HMAC over the raw body, so auth here is the signature check.
+                .requestMatchers(HttpMethod.POST, "/api/v1/payments/razorpay/webhook").permitAll()
                 // catalogue writes are admin-only
                 .requestMatchers(HttpMethod.POST, "/api/v1/products", "/api/v1/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/products", "/api/v1/products/**").hasRole("ADMIN")

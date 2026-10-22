@@ -11,12 +11,15 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
+import com.example.nexusCommerce.dtos.GetVariantResponseDto;
+import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
 import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.services.ProductService;
 import com.example.nexusCommerce.utils.ApiResponse;
@@ -93,15 +96,71 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success(null, "Product deleted successfully!"));
     }
 
-    @Operation(summary="Get Products with Category Name",
-               description="Fetches all the products from that specified category"
+    @Operation(summary="Browse the catalogue by facets",
+               description="The storefront listing and collection pages. Filter by gender, category slug (a "
+                           + "parent slug matches its whole subtree), price range, sizes and colours; sort by "
+                           + "id, price, rating, createdAt or title. Unknown facet values are rejected rather "
+                           + "than answered with an empty page, which also keeps arbitrary strings from minting "
+                           + "cache entries. Public; cached per facet combination."
     )
-    @GetMapping("/search")    public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> findProductsByCategory(
-            @RequestParam("categoryName") String category,
+    @GetMapping("/search")
+    public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> search(
+            @ModelAttribute ProductSearchRequestDto query){
+        // Clamp at the web boundary: the cache key inside the service is built from these
+        // numbers, so an unclamped size would fragment the cache over identical result sets.
+        query.setSize(Pagination.clampSize(query.getSize()));
+        PageResponse<GetProductWithDetailsResponseDto> products = productService.search(query);
+        return ResponseEntity.ok(ApiResponse.success(products, "Products fetched successfully!"));
+    }
+
+    @Operation(summary="Get Products by category name",
+               description="Every product whose category name matches, case-insensitively. Where two "
+                           + "categories share a name (Men/Denim and Women/Denim) both are included; use "
+                           + "/search?categorySlug= for an exact branch. Public."
+    )
+    @GetMapping("/by-category/{categoryName}")
+    public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> findProductsByCategory(
+            @PathVariable String categoryName,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size){
-        PageResponse<GetProductWithDetailsResponseDto> products = productService.findByCategory(category, page, Pagination.clampSize(size));
+        PageResponse<GetProductWithDetailsResponseDto> products =
+                productService.findByCategory(categoryName, page, Pagination.clampSize(size));
         return ResponseEntity.ok(ApiResponse.success(products, "Products fetched by category successfully!"));
+    }
+
+    @Operation(summary="Get a product by slug",
+               description="The product detail page route. A slug is stable across renames, which is why "
+                           + "storefront URLs and the seeded catalogue use it instead of the numeric id. Public."
+    )
+    @GetMapping("/slug/{slug}")
+    public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductBySlug(@PathVariable String slug){
+        return ResponseEntity.ok(ApiResponse.success(productService.getProductBySlug(slug),
+                "Product fetched successfully!"));
+    }
+
+    @Operation(summary="List a product's variants",
+               description="Every size and colour the product is sold in, with per-variant stock and price. "
+                           + "Already included in /{id}/details; this is the lighter call for a PDP variant "
+                           + "picker. Public."
+    )
+    @GetMapping("/{id}/variants")
+    public ResponseEntity<ApiResponse<List<GetVariantResponseDto>>> getVariants(@PathVariable Long id){
+        return ResponseEntity.ok(ApiResponse.success(productService.getVariants(id), "Variants fetched successfully!"));
+    }
+
+    @Operation(summary="List every size on sale",
+               description="The facet values the size filter should offer, taken from the catalogue itself so "
+                           + "the UI cannot present a size that matches nothing. Public.")
+    @GetMapping("/facets/sizes")
+    public ResponseEntity<ApiResponse<List<String>>> getAvailableSizes(){
+        return ResponseEntity.ok(ApiResponse.success(productService.getAvailableSizes(), "Sizes fetched successfully!"));
+    }
+
+    @Operation(summary="List every colour on sale",
+               description="The facet values the colour filter should offer. Public.")
+    @GetMapping("/facets/colors")
+    public ResponseEntity<ApiResponse<List<String>>> getAvailableColors(){
+        return ResponseEntity.ok(ApiResponse.success(productService.getAvailableColors(), "Colors fetched successfully!"));
     }
 
     // Task: Write an API to get all the unique categories

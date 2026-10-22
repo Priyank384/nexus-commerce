@@ -138,7 +138,13 @@ public class WishlistServiceImpl implements WishlistService {
     @Transactional
     @Override
     public void removeItem(Long userId, Long wishlistId, Long productId) {
-        Wishlist wishlist = requireOwned(userId, wishlistId);
+        // A removal never materialises the default list: unlike addItem, there is nothing to
+        // save here, and creating a row just to report that it holds nothing would be wrong.
+        Wishlist wishlist = wishlistId == null
+                ? wishlistRepository.findFirstByUserIdOrderByCreatedAtAsc(userId)
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Product " + productId + " is not saved in a wishlist yet"))
+                : requireOwned(userId, wishlistId);
         WishlistItem item = wishlistItemRepository.findByWishlistIdAndProductId(wishlist.getId(), productId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Product " + productId + " is not in wishlist " + wishlist.getId()));
@@ -160,7 +166,7 @@ public class WishlistServiceImpl implements WishlistService {
         Wishlist wishlist = wishlistRepository.findById(wishlistId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Wishlist with id: " + wishlistId + " Not Found!"));
-        if (!wishlist.getUserId().equals(userId)) {
+        if (!userId.equals(ownerId(wishlist))) {
             throw new InvalidRequestException("Wishlist " + wishlistId + " does not belong to user " + userId);
         }
         return wishlist;
@@ -187,24 +193,43 @@ public class WishlistServiceImpl implements WishlistService {
             throw new InvalidRequestException("Wishlist " + wishlist.getId() + " does not belong to user " + userId);
         }
         List<WishlistItem> items = wishlistItemRepository.findByWishlistIdOrderByCreatedAtDesc(wishlist.getId());
-        Map<Long, Product> products = items.isEmpty() ? Map.of()
-                : productRepository.findAllById(items.stream()
-                        .map(WishlistItem::getProductId).collect(Collectors.toList()))
-                        .stream().collect(Collectors.toMap(Product::getId, Function.identity()));
-        List<Long> variantIds = items.stream()
-                .map(WishlistItem::getVariantId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        List<Long> productIds = items.stream().map(WishlistServiceImpl::productIdOf)
+                .filter(Objects::nonNull).collect(Collectors.toList());
+        Map<Long, Product> products = productIds.isEmpty() ? Map.of()
+                : productRepository.findAllById(productIds).stream()
+                        .collect(Collectors.toMap(Product::getId, Function.identity()));
+        List<Long> variantIds = items.stream().map(WishlistServiceImpl::variantIdOf)
+                .filter(Objects::nonNull).collect(Collectors.toList());
         Map<Long, ProductVariant> variants = variantIds.isEmpty() ? Map.of()
                 : variantRepository.findAllById(variantIds).stream()
                         .collect(Collectors.toMap(ProductVariant::getId, Function.identity()));
 
         List<GetWishlistItemResponseDto> mapped = items.stream()
                 .map(item -> wishlistAdapter.mapToGetWishlistItemResponseDto(item,
-                        products.get(item.getProductId()),
-                        item.getVariantId() == null ? null : variants.get(item.getVariantId())))
+                        products.get(productIdOf(item)),
+                        variantIdOf(item) == null ? null : variants.get(variantIdOf(item))))
                 .collect(Collectors.toList());
 
         return wishlistAdapter.mapToGetWishlistResponseDto(wishlist, mapped);
+    }
+
+    /**
+     * product_id and variant_id are insertable=false views of their associations, so a line saved
+     * moments earlier in the same transaction has no scalar populated yet. Reading the identifier
+     * off the association instead costs nothing (a proxy answers getId() without loading) and
+     * keeps the write response as complete as the next read.
+     */
+    private static Long productIdOf(WishlistItem item) {
+        if (item.getProductId() != null) {
+            return item.getProductId();
+        }
+        return item.getProduct() != null ? item.getProduct().getId() : null;
+    }
+
+    private static Long variantIdOf(WishlistItem item) {
+        if (item.getVariantId() != null) {
+            return item.getVariantId();
+        }
+        return item.getVariant() != null ? item.getVariant().getId() : null;
     }
 }
