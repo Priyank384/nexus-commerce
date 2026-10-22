@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -13,11 +14,15 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Fixed-window rate limiter keyed on the caller's IP, applied only to POST
  * /api/v1/auth/login. Enough to slow credential stuffing without penalising
  * shared NAT households; for real hardening move to a gateway or WAF.
+ *
+ * Fails open when Redis is unreachable - see TokenBlacklistService for the same
+ * reasoning: a soft control should not take sign-in down with the cache.
  *
  * Redis access is resolved lazily via ObjectProvider: the interceptor bean
  * itself must always exist (otherwise web-slice tests without Redis fail
@@ -26,6 +31,7 @@ import lombok.RequiredArgsConstructor;
  */
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class LoginRateLimiterInterceptor implements HandlerInterceptor {
 
     private static final String PREFIX = "rate::login::";
@@ -46,9 +52,17 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
 
         String ip = clientIp(request);
         String key = PREFIX + ip;
-        Long count = redis.opsForValue().increment(key);
-        if (count != null && count == 1L) {
-            redis.expire(key, Duration.ofSeconds(windowSeconds));
+        Long count;
+        try {
+            count = redis.opsForValue().increment(key);
+            if (count != null && count == 1L) {
+                redis.expire(key, Duration.ofSeconds(windowSeconds));
+            }
+        } catch (DataAccessException e) {
+            // Best-effort control, so it fails open: an unreadable counter must not lock every
+            // honest shopper out of signing in while Redis is having a bad minute.
+            log.warn("Login rate limit counter unreadable for {}; allowing the attempt. {}", ip, e.getMessage());
+            return true;
         }
         if (count != null && count > maxAttempts) {
             response.setStatus(429);
