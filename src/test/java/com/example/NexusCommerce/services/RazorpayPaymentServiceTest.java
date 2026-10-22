@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -73,6 +74,36 @@ class RazorpayPaymentServiceTest {
 
     private void givenTotal(String rupees) {
         lenient().when(orderProductsRepository.totalByOrderId(7L)).thenReturn(new BigDecimal(rupees));
+    }
+
+    /**
+     * The settle is a conditional UPDATE, not a save, so the fixture has to move the way the row
+     * would. Returning 1 means "this caller won the race"; the service re-reads the order after
+     * the bulk write, which hands back this same instance.
+     */
+    private void givenSettleWins(Order order) {
+        lenient().when(orderRepository.settleIfUnpaid(eq(7L), any(), any(), any(),
+                eq(PaymentStatus.PAID), eq(PaymentStatus.PAID)))
+                .thenAnswer(call -> {
+                    order.setPaymentStatus(PaymentStatus.PAID);
+                    order.setPaymentProvider("razorpay");
+                    order.setPaymentRef(call.getArgument(2));
+                    order.setPaidAt(java.time.LocalDateTime.now());
+                    return 1;
+                });
+    }
+
+    /**
+     * Stands in for a capture that landed while this request was in flight: the guard matches no
+     * row, so this caller writes nothing, but the row the service re-reads is already settled.
+     */
+    private void givenSettleLoses(Order order) {
+        lenient().when(orderRepository.settleIfUnpaid(eq(7L), any(), any(), any(),
+                eq(PaymentStatus.PAID), eq(PaymentStatus.PAID)))
+                .thenAnswer(call -> {
+                    order.setPaymentStatus(PaymentStatus.PAID);
+                    return 0;
+                });
     }
 
     @Test
@@ -140,6 +171,7 @@ class RazorpayPaymentServiceTest {
         // Signed over the intent stored here, not over anything the client sent.
         when(razorpay.paymentSignatureMatches("order_RZP1|pay_ABC", "deadbeef")).thenReturn(true);
         when(razorpay.currency()).thenReturn("INR");
+        givenSettleWins(order);
 
         GetPaymentStatusResponseDto result = paymentService.verifyPayment(
                 1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
@@ -163,7 +195,7 @@ class RazorpayPaymentServiceTest {
 
         assertEquals(PaymentStatus.CREATED, order.getPaymentStatus());
         assertNull(order.getPaymentRef());
-        verify(orderRepository, never()).save(any());
+        verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
         verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
     }
 
@@ -200,12 +232,13 @@ class RazorpayPaymentServiceTest {
         when(razorpay.parseWebhook(WEBHOOK_BODY))
                 .thenReturn(new RazorpayClient.WebhookEvent("payment.captured", "order_RZP1", "pay_ABC"));
         when(orderRepository.findByPaymentIntentId("order_RZP1")).thenReturn(Optional.of(order));
+        givenOrder(order);
+        givenSettleWins(order);
 
         paymentService.handleWebhook(WEBHOOK_BODY, "sig");
 
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
         assertEquals("pay_ABC", order.getPaymentRef());
-        verify(orderRepository).save(order);
         verify(notifications).sendOrderConfirmation(1L, 7L, "shopper@example.com");
     }
 
@@ -226,7 +259,7 @@ class RazorpayPaymentServiceTest {
 
         paymentService.handleWebhook(WEBHOOK_BODY, "sig");
 
-        verify(orderRepository, never()).save(any());
+        verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -239,8 +272,10 @@ class RazorpayPaymentServiceTest {
 
         paymentService.handleWebhook(WEBHOOK_BODY, "sig");
 
-        assertEquals(PaymentStatus.FAILED, order.getPaymentStatus());
-        assertNull(order.getPaymentRef());
+        // The failure moves the status and nothing else, so a reference from a good capture
+        // cannot be blanked by a later failure for a different instrument.
+        verify(orderRepository).markFailedIfNotPaid(7L, PaymentStatus.FAILED, PaymentStatus.PAID);
+        verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
         verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
     }
 
@@ -254,7 +289,7 @@ class RazorpayPaymentServiceTest {
 
         paymentService.handleWebhook(WEBHOOK_BODY, "sig");
 
-        verify(orderRepository, never()).save(any());
+        verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
         verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
     }
 
@@ -312,5 +347,72 @@ class RazorpayPaymentServiceTest {
 
         assertEquals(100L, result.getAmount());
         assertEquals(new BigDecimal("1.00"), result.getTotalPrice());
+    }
+
+    @Test
+    void createPayment_reusesTheIntentWhileTheOrderStillPricesTheSame() {
+        // The storefront calls this again whenever the shopper reopens the pay sheet. A second
+        // intent would leave the first one payable at Razorpay but unresolvable here, so the
+        // money would land on an order we can no longer match.
+        Order order = unpaidOrder(1L, "order_RZP1", PaymentStatus.CREATED);
+        order.setPaymentAmountPaise(129900L);
+        givenOrder(order);
+        givenTotal("1299.00");
+        when(razorpay.keyId()).thenReturn("rzp_test_123");
+        when(razorpay.currency()).thenReturn("INR");
+
+        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+
+        assertEquals("order_RZP1", result.getRazorpayOrderId());
+        verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void createPayment_whenTheOrderWasRepriced_issuesAFreshIntent() {
+        Order order = unpaidOrder(1L, "order_RZP1", PaymentStatus.CREATED);
+        order.setPaymentAmountPaise(129900L);
+        givenOrder(order);
+        givenTotal("1499.00");
+        when(razorpay.createOrder(149900L, "order-7", "7")).thenReturn("order_RZP9");
+        when(razorpay.keyId()).thenReturn("rzp_test_123");
+        when(razorpay.currency()).thenReturn("INR");
+
+        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+
+        assertEquals("order_RZP9", result.getRazorpayOrderId());
+        assertEquals(149900L, order.getPaymentAmountPaise().longValue());
+    }
+
+    @Test
+    void verifyPayment_whenAConcurrentCaptureWon_first_neverMailsTwice() {
+        Order order = unpaidOrder(1L, "order_RZP1", PaymentStatus.CREATED);
+        givenOrder(order);
+        givenTotal("1299.00");
+        when(razorpay.paymentSignatureMatches("order_RZP1|pay_ABC", "deadbeef")).thenReturn(true);
+        when(razorpay.currency()).thenReturn("INR");
+        givenSettleLoses(order);
+
+        GetPaymentStatusResponseDto result = paymentService.verifyPayment(
+                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
+
+        assertEquals(PaymentStatus.PAID, result.getPaymentStatus());
+        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+    }
+
+    @Test
+    void webhook_paymentFailed_neverReopensAnOrderTheMoneySettled() {
+        Order order = unpaidOrder(1L, "order_RZP1", PaymentStatus.PAID);
+        when(razorpay.webhookSignatureMatches(WEBHOOK_BODY, "sig")).thenReturn(true);
+        when(razorpay.parseWebhook(WEBHOOK_BODY))
+                .thenReturn(new RazorpayClient.WebhookEvent("payment.failed", "order_RZP1", "pay_LATE"));
+        when(orderRepository.findByPaymentIntentId("order_RZP1")).thenReturn(Optional.of(order));
+
+        paymentService.handleWebhook(WEBHOOK_BODY, "sig");
+
+        // The guard lives in the UPDATE itself: two webhooks for different instruments can
+        // arrive together, and the one that reads PAID must not become the one that reopens it.
+        verify(orderRepository).markFailedIfNotPaid(7L, PaymentStatus.FAILED, PaymentStatus.PAID);
+        assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
     }
 }

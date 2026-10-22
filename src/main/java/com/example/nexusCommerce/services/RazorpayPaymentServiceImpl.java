@@ -58,15 +58,24 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         }
         BigDecimal totalPrice = totalOf(orderId);
         long amountInPaise = toPaise(totalPrice);
-        // A fresh intent every time, rather than reusing a stored one: an admin can still edit
-        // the order between attempts, and charging the amount that was priced earlier would be
-        // worse than invalidating a checkout sheet the shopper has already abandoned.
-        String razorpayOrderId = razorpay.createOrder(amountInPaise, "order-" + orderId, orderId.toString());
+        // Reuse the intent we already issued while it still prices the same order. Issuing a
+        // fresh one on every call would leave the previous intent live at Razorpay but
+        // unreachable from here, so paying it would capture money against an order we can no
+        // longer resolve. A genuine re-price is the one case that does need a new intent.
+        boolean pricedTheSame = order.getPaymentAmountPaise() != null
+                && order.getPaymentAmountPaise() == amountInPaise
+                && order.getPaymentStatus() == PaymentStatus.CREATED;
+        String razorpayOrderId = pricedTheSame
+                ? order.getPaymentIntentId()
+                : razorpay.createOrder(amountInPaise, "order-" + orderId, orderId.toString());
 
-        order.setPaymentProvider(PROVIDER);
-        order.setPaymentIntentId(razorpayOrderId);
-        order.setPaymentStatus(PaymentStatus.CREATED);
-        orderRepository.save(order);
+        if (!pricedTheSame) {
+            order.setPaymentProvider(PROVIDER);
+            order.setPaymentIntentId(razorpayOrderId);
+            order.setPaymentAmountPaise(amountInPaise);
+            order.setPaymentStatus(PaymentStatus.CREATED);
+            orderRepository.save(order);
+        }
 
         return CreatePaymentResponseDto.builder()
                 .orderId(orderId)
@@ -101,8 +110,7 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
             throw new InvalidRequestException(
                     "Payment signature did not match for order " + orderId + "; nothing was captured");
         }
-        markPaid(order, requestDto.getRazorpayPaymentId());
-        return statusOf(order);
+        return statusOf(settle(orderId, requestDto.getRazorpayPaymentId()));
     }
 
     @Transactional(readOnly = true)
@@ -140,25 +148,36 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         switch (event.event() == null ? "" : event.event()) {
             case "payment.captured", "order.paid" -> {
                 if (order.getPaymentStatus() != PaymentStatus.PAID) {
-                    markPaid(order, event.razorpayPaymentId());
+                    settle(order.getId(), event.razorpayPaymentId());
                 }
             }
             case "payment.failed", "payment.process_failed" -> {
-                order.setPaymentStatus(PaymentStatus.FAILED);
-                orderRepository.save(order);
+                // Status only: a failure for one instrument must not reopen an order another
+                // instrument already paid, and must not drop the reference from a good capture.
+                orderRepository.markFailedIfNotPaid(order.getId(), PaymentStatus.FAILED, PaymentStatus.PAID);
             }
             default -> log.info("Ignoring Razorpay event '{}' for order {}", event.event(), order.getId());
         }
     }
 
-    private void markPaid(Order order, String razorpayPaymentId) {
-        order.setPaymentProvider(PROVIDER);
-        order.setPaymentStatus(PaymentStatus.PAID);
-        order.setPaymentRef(razorpayPaymentId);
-        order.setPaidAt(LocalDateTime.now());
-        orderRepository.save(order);
-        notifications.sendOrderConfirmation(order.getUser().getId(), order.getId(), order.getUser().getEmail());
-        log.info("Order {} settled by {} (payment {})", order.getId(), PROVIDER, razorpayPaymentId);
+    /**
+     * Writes the capture and notifies, allowing exactly one winner. The client's verify and
+     * Razorpay's webhook arrive together routinely, and a read-then-save would let both settle and
+     * both mail. Returns the settled row, re-read because the bulk update cleared the persistence
+     * context.
+     */
+    private Order settle(Long orderId, String razorpayPaymentId) {
+        int settled = orderRepository.settleIfUnpaid(orderId, PROVIDER, razorpayPaymentId,
+                LocalDateTime.now(), PaymentStatus.PAID, PaymentStatus.PAID);
+        Order paid = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order with id: " + orderId + " Not Found!"));
+        if (settled == 1) {
+            notifications.sendOrderConfirmation(paid.getUser().getId(), paid.getId(), paid.getUser().getEmail());
+            log.info("Order {} settled by {} (payment {})", orderId, PROVIDER, razorpayPaymentId);
+        } else {
+            log.info("Order {} was settled by a concurrent request; confirmation already sent", orderId);
+        }
+        return paid;
     }
 
     private Order requireOwned(Long userId, Long orderId) {

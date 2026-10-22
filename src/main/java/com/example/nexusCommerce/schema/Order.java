@@ -53,6 +53,12 @@ public class Order extends BaseEntity{
     @Column(name = "payment_intent_id", length = 120)
     private String paymentIntentId;
 
+    // The amount the stored intent was priced at, in paise. Without it a repeat "start payment"
+    // cannot tell whether the intent it already issued still matches the order, and re-issuing
+    // on a mismatch would orphan the intent a shopper may still be paying.
+    @Column(name = "payment_amount_paise")
+    private Long paymentAmountPaise;
+
     // The gateway's own payment id, only known once the capture succeeded.
     @Column(name = "payment_ref", length = 120)
     private String paymentRef;
