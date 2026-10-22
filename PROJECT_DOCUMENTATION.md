@@ -23,6 +23,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 15. [Manual testing checklist](#15-manual-testing-checklist)
 16. [CI, Docker & deployment](#16-ci-docker--deployment)
 17. [Idempotency, rate limiting & domain events](#17-idempotency-rate-limiting--domain-events)
+18. [Frontend workspace](#18-frontend-workspace)
 
 ---
 
@@ -1280,6 +1281,58 @@ The bundled `LoggingNotificationService` is annotated `@Service @ConditionalOnMi
 
 ---
 
+## 18. Frontend workspace
+
+The companion frontend lives at [`../NexusCommerceFrontend`](../../NexusCommerceFrontend/README.md) — a Next.js 16 (App Router, Turbopack, React 19) workspace with its own git repo. Stack: Tailwind v4, shadcn/ui, TanStack Query v5, Zustand, React Hook Form + Zod, `openapi-fetch` with types generated from this backend's OpenAPI document, Vitest + MSW, Playwright.
+
+### 18.1 Integration pattern — Backend-for-Frontend (BFF)
+
+The browser **never** hits Spring directly. Every request goes to `http://localhost:3000` and one of two Next route-handler clusters forwards to `http://localhost:3001`:
+
+| Frontend surface | forwards to | Purpose |
+|------------------|-------------|---------|
+| `POST /api/auth/login` | `POST /api/v1/auth/login` | Sets the httpOnly `rc` cookie from `data.refreshToken`; strips `refreshToken` from the JSON before returning to the browser. |
+| `POST /api/auth/refresh` | `POST /api/v1/auth/refresh` | Reads the `rc` cookie, rotates it on success, clears it (`maxAge: 0`) on failure. |
+| `POST /api/auth/logout` | `POST /api/v1/auth/logout` | Sends both the refresh cookie and current bearer, clears the cookie. |
+| `/api/v1/[...path]` | `/api/v1/**` | Generic pass-through proxy — GET/POST/PUT/PATCH/DELETE, headers, body, query string, multipart. Streams the request body straight to Spring. |
+
+Because the browser only ever sees the frontend origin:
+
+- **No CORS change is required on this backend** for the shipped frontend. `SecurityConfig`'s existing `corsConfigurationSource()` stays for direct-API consumers (Postman, mobile, third-party integrations).
+- `Set-Cookie` never crosses origins — no `SameSite=None` / `Secure` gymnastics needed.
+
+### 18.2 Token handling
+
+- **Access token**: kept in a memory-only Zustand store (`src/lib/auth/session.ts`). Never written to `localStorage` or `sessionStorage`. Page reload re-hydrates it via a single `POST /api/auth/refresh` call from the `(auth)` bootstrap.
+- **Refresh token**: only ever exists as an httpOnly cookie named `rc`, `Path=/api/auth`. The BFF route handlers read it via `next/headers.cookies()`; JS never sees it.
+- **401 → refresh → retry**: the typed `api` client (`src/lib/api/client.ts`) has a middleware that proactively refreshes if the access token is within 30 s of expiry, and retries the original call once on 401 after a refresh round-trip. Concurrent 401s share one single-flight refresh promise.
+- **Cookie lifetime**: `REFRESH_MAX_AGE = 7 * 24 * 60 * 60` matches backend `JWT_REFRESH_EXPIRATION_DAYS` (default 7). If that env changes, mirror it here.
+
+### 18.3 OpenAPI contract
+
+Frontend types are generated from a live call to `/v3/api-docs`:
+
+```bash
+cd NexusCommerceFrontend && npm run codegen   # → src/lib/api/schema.d.ts
+```
+
+Regenerate after any controller change. The backend's Swagger/OpenAPI setup (§2, §12) is the single source of truth for the frontend's typed client.
+
+### 18.4 Product images
+
+Uploaded images (`POST /api/v1/admin/products/{id}/image`, §12.6) are served from `${app.upload.dir}` mounted at `/uploads/**` on Spring. The frontend rewrites `/uploads/:path*` → `${API_BASE_URL}/uploads/:path*` in `next.config.ts`, so product cards can render `product.image` (`/uploads/products/<uuid>.png`) without leaking the backend origin.
+
+### 18.5 Boot order for local dev
+
+```bash
+cd NexusCommerce        && ./gradlew bootRun        # Spring on 3001, Redis + MySQL up first
+cd NexusCommerceFrontend && npm run dev             # Next on 3000, expects Spring on 3001
+```
+
+The frontend refuses to start if `API_BASE_URL` is unset (see `src/lib/api/backend.ts`) so misconfiguration fails fast instead of returning opaque 502s.
+
+---
+
 ## Document info
 
 | Field | Value |
@@ -1287,6 +1340,6 @@ The bundled `LoggingNotificationService` is annotated `@Service @ConditionalOnMi
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
 | Schema version (Flyway) | **V14** |
-| Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml` |
+| Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.

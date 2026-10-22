@@ -431,6 +431,19 @@ docker-compose.yml   # Local ELK stack + Redis + optional MySQL
 
 ---
 
+## Frontend workspace
+
+A Next.js 16 App Router frontend lives at [`../NexusCommerceFrontend`](../NexusCommerceFrontend/README.md). It talks to this backend through a **Backend-for-Frontend (BFF)** pattern:
+
+- Browser only ever hits `http://localhost:3000`. Next route handlers under `/api/auth/{login,refresh,logout}` set an httpOnly refresh-token cookie and `/api/v1/[...path]` proxies every REST call — bearer, body and query string included — to Spring on `http://localhost:3001`.
+- Access tokens live in the browser's JS memory; refresh tokens never leave the cookie jar.
+- Under BFF the browser never sends cross-origin requests, so **no CORS change on this backend is required** for the shipped frontend. `SecurityConfig`'s existing `corsConfigurationSource()` remains for direct-API consumers (Postman, mobile, third-party integrations).
+- Product images stored on this backend under `/uploads/**` are reachable from the frontend through a Next rewrite that forwards `/uploads/:path*` to `${API_BASE_URL}/uploads/:path*`.
+
+See the [frontend README](../NexusCommerceFrontend/README.md) for stack, scripts (`codegen`, `test`, `test:e2e`) and route-group layout.
+
+---
+
 ## License / status
 
 **NexusCommerce** is the application and Gradle project name (`spring.application.name` and New Relic `app_name` align with this). Add your own **LICENSE** and deployment runbooks as needed for how you ship or teach the project.
