@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
+import org.springframework.beans.factory.annotation.Value;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.Cache;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
@@ -57,31 +59,35 @@ public class CacheConfig implements CachingConfigurer {
     private static final Duration ITEM_TTL = Duration.ofMinutes(10);
     private static final Duration AGGREGATE_TTL = Duration.ofMinutes(15);
 
+    @Value("${spring.datasource.url:}")
+    private String datasourceUrl;
+
     @Bean
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis", matchIfMissing = true)
     public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory) {
+        String namespace = datasourceNamespace(datasourceUrl);
         // Null values are cached by default, which is what we want: a request for a
         // non-existent id must not reach the database on every call.
-        RedisCacheConfiguration list = baseConfig(LIST_TTL);
+        RedisCacheConfiguration list = baseConfig(LIST_TTL, namespace);
 
         Map<String, RedisCacheConfiguration> perCache = Map.ofEntries(
                 Map.entry(CATEGORY_ALL, list),
-                Map.entry(CATEGORY_BY_ID, baseConfig(ITEM_TTL)),
-                Map.entry(CATEGORY_TREE, baseConfig(AGGREGATE_TTL)),
+                Map.entry(CATEGORY_BY_ID, baseConfig(ITEM_TTL, namespace)),
+                Map.entry(CATEGORY_TREE, baseConfig(AGGREGATE_TTL, namespace)),
                 Map.entry(PRODUCT_ALL, list),
-                Map.entry(PRODUCT_BY_ID, baseConfig(ITEM_TTL)),
-                Map.entry(PRODUCT_BY_SLUG, baseConfig(ITEM_TTL)),
-                Map.entry(PRODUCT_DETAILS, baseConfig(ITEM_TTL)),
+                Map.entry(PRODUCT_BY_ID, baseConfig(ITEM_TTL, namespace)),
+                Map.entry(PRODUCT_BY_SLUG, baseConfig(ITEM_TTL, namespace)),
+                Map.entry(PRODUCT_DETAILS, baseConfig(ITEM_TTL, namespace)),
                 Map.entry(PRODUCT_BY_CATEGORY, list),
                 Map.entry(PRODUCT_SEARCH, list),
-                Map.entry(VARIANT_SIZE_VALUES, baseConfig(AGGREGATE_TTL)),
-                Map.entry(VARIANT_COLOR_VALUES, baseConfig(AGGREGATE_TTL)),
-                Map.entry(PRODUCT_UNIQUE_CATEGORIES, baseConfig(AGGREGATE_TTL)),
+                Map.entry(VARIANT_SIZE_VALUES, baseConfig(AGGREGATE_TTL, namespace)),
+                Map.entry(VARIANT_COLOR_VALUES, baseConfig(AGGREGATE_TTL, namespace)),
+                Map.entry(PRODUCT_UNIQUE_CATEGORIES, baseConfig(AGGREGATE_TTL, namespace)),
                 Map.entry(ORDER_ALL, list),
-                Map.entry(ORDER_BY_ID, baseConfig(ITEM_TTL)),
-                Map.entry(ORDER_SUMMARY, baseConfig(ITEM_TTL)),
+                Map.entry(ORDER_BY_ID, baseConfig(ITEM_TTL, namespace)),
+                Map.entry(ORDER_SUMMARY, baseConfig(ITEM_TTL, namespace)),
                 Map.entry(REVIEW_ALL, list),
-                Map.entry(REVIEW_BY_ID, baseConfig(ITEM_TTL)),
+                Map.entry(REVIEW_BY_ID, baseConfig(ITEM_TTL, namespace)),
                 Map.entry(REVIEW_BY_PRODUCT, list),
                 Map.entry(REVIEW_BY_ORDER, list));
 
@@ -117,10 +123,33 @@ public class CacheConfig implements CachingConfigurer {
                 + ThreadLocalRandom.current().nextLong(spread));
     }
 
-    private static RedisCacheConfiguration baseConfig(Duration ttl) {
+    /**
+     * The storefront switches between the MySQL demo catalogue and the Postgres apparel
+     * catalogue by pointing at a different database, but both write into one Redis. A cached
+     * product id means different rows in each, so serving one from the other's entries is a
+     * silent wrong-read rather than an error. Prefixing with the database name keeps the two
+     * sets of keys apart without any manual config.
+     */
+    static String datasourceNamespace(String url) {
+        if (url == null || url.isBlank()) {
+            return "default";
+        }
+        int slash = url.lastIndexOf('/');
+        if (slash < 0) {
+            return "default";
+        }
+        String path = url.substring(slash + 1);
+        int query = path.indexOf('?');
+        if (query >= 0) {
+            path = path.substring(0, query);
+        }
+        return path.isBlank() ? "default" : path.replaceAll("[^A-Za-z0-9_-]", "");
+    }
+
+    private static RedisCacheConfiguration baseConfig(Duration ttl, String namespace) {
         return RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(jittered(ttl))
-                .computePrefixWith(name -> name + ":")
+                .computePrefixWith(name -> namespace + ":" + name + ":")
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
