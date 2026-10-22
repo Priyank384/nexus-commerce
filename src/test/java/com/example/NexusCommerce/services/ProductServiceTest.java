@@ -32,11 +32,15 @@ import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
+import com.example.nexusCommerce.repositories.CartItemRepository;
 import com.example.nexusCommerce.repositories.ProductImageRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ProductVariantRepository;
+import com.example.nexusCommerce.repositories.WishlistItemRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.schema.ProductImage;
+import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
 
@@ -54,6 +58,12 @@ class ProductServiceTest {
 
     @Mock
     private ProductImageRepository imageRepository;
+
+    @Mock
+    private CartItemRepository cartItemRepository;
+
+    @Mock
+    private WishlistItemRepository wishlistItemRepository;
 
     @Spy
     private ProductAdapter productAdapter = new ProductAdapter();
@@ -199,6 +209,38 @@ class ProductServiceTest {
         productService.deleteProduct(1L);
 
         verify(productRepository).deleteById(1L);
+    }
+
+    @Test
+    void deleteProduct_retiresTheVariantsAndImagesThatBelongedToIt() {
+        Product product = sampleProduct();
+        ProductVariant medium = ProductVariant.builder().product(product).sku("PT-1").size("M")
+                .colorName("Black").colorHex("#000000").stock(4).build();
+        medium.setId(11L);
+        ProductVariant large = ProductVariant.builder().product(product).sku("PT-2").size("L")
+                .colorName("Black").colorHex("#000000").stock(4).build();
+        large.setId(12L);
+        ProductImage hero = ProductImage.builder().product(product).url("/uploads/products/a.png")
+                .position(0).build();
+        hero.setId(21L);
+
+        when(productRepository.existsById(1L)).thenReturn(true);
+        when(variantRepository.findByProductIdOrderBySizeAscColorNameAsc(1L))
+                .thenReturn(List.of(medium, large));
+        when(imageRepository.findByProductIdOrderByPositionAsc(1L)).thenReturn(List.of(hero));
+        when(cartItemRepository.retireByProduct(1L)).thenReturn(1);
+        when(wishlistItemRepository.retireByProduct(1L)).thenReturn(1);
+
+        productService.deleteProduct(1L);
+
+        verify(variantRepository).deleteById(11L);
+        verify(variantRepository).deleteById(12L);
+        verify(imageRepository).delete(hero);
+        verify(productRepository).deleteById(1L);
+        // A cart line whose product no longer resolves makes GET /cart throw for that shopper,
+        // so live carts and saved wishes are retired with the style.
+        verify(cartItemRepository).retireByProduct(1L);
+        verify(wishlistItemRepository).retireByProduct(1L);
     }
 
     @Test

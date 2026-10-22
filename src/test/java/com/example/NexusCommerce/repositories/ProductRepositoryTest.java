@@ -21,6 +21,7 @@ import com.example.nexusCommerce.configs.JpaAuditingConfig;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.schema.ProductVariant;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace=AutoConfigureTestDatabase.Replace.ANY)
@@ -119,5 +120,55 @@ public class ProductRepositoryTest {
         assertEquals(2, result.size());
         assertTrue(result.contains("Electronics"));
         assertTrue(result.contains("Books"));
+    }
+
+    @Test
+    void findUniqueVariantSizes_hidesSizesOfUnpublishedProducts() {
+        persistVariant(phone, "M", "Bone");
+        Product unpublished = persistProduct("Retired Tee", electronicsCategory);
+        unpublished.setIsActive(false);
+        persistVariant(unpublished, "XXL", "Bone");
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        assertEquals(List.of("M"), productRepository.findUniqueVariantSizes());
+        assertEquals(List.of("Bone"), productRepository.findUniqueVariantColors());
+    }
+
+    @Test
+    void findUniqueVariantSizes_hidesVariantsOfSoftDeletedProducts() {
+        Product retiring = persistProduct("Seasonal Tee", electronicsCategory);
+        persistVariant(phone, "M", "Bone");
+        persistVariant(retiring, "XS", "Olive");
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        productRepository.deleteById(retiring.getId());
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        assertEquals(List.of("M"), productRepository.findUniqueVariantSizes());
+        assertEquals(List.of("Bone"), productRepository.findUniqueVariantColors());
+    }
+
+    private Product persistProduct(String title, Category category) {
+        return testEntityManager.persistAndFlush(Product.builder()
+                .title(title)
+                .description(title)
+                .price(BigDecimal.valueOf(890).setScale(2, RoundingMode.HALF_UP))
+                .rating(BigDecimal.valueOf(4.3))
+                .category(category)
+                .build());
+    }
+
+    private void persistVariant(Product product, String size, String colorName) {
+        testEntityManager.persistAndFlush(ProductVariant.builder()
+                .product(product)
+                .sku(product.getTitle() + "-" + size + "-" + colorName)
+                .size(size)
+                .colorName(colorName)
+                .colorHex("#FFFFFF")
+                .stock(5)
+                .build());
     }
 }

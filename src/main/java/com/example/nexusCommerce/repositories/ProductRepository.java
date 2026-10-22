@@ -87,11 +87,16 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
     @EntityGraph(attributePaths = {"category", "category.parent"})
     Optional<Product> findBySlugIgnoreCase(String slug);
 
-    /** Every size and colour actually on sale, used to reject invented filter values. */
-    @Query("SELECT DISTINCT v.size FROM ProductVariant v")
+    /**
+     * Every size and colour a shopper can actually buy, used both to publish the facets and to
+     * reject invented filter values. Joined through the product deliberately: a variant under an
+     * unpublished or deleted product must not advertise a size the storefront will not sell,
+     * because that answers a valid-looking filter with an empty page.
+     */
+    @Query("SELECT DISTINCT v.size FROM ProductVariant v JOIN v.product p WHERE p.isActive = TRUE")
     List<String> findUniqueVariantSizes();
 
-    @Query("SELECT DISTINCT v.colorName FROM ProductVariant v")
+    @Query("SELECT DISTINCT v.colorName FROM ProductVariant v JOIN v.product p WHERE p.isActive = TRUE")
     List<String> findUniqueVariantColors();
 
     long countByStockLessThanEqual(Integer stock);

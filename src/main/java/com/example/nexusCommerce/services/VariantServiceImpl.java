@@ -24,6 +24,7 @@ import com.example.nexusCommerce.dtos.UpdateVariantRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
+import com.example.nexusCommerce.repositories.CartItemRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.schema.Product;
@@ -42,6 +43,7 @@ public class VariantServiceImpl implements VariantService {
 
     private final ProductVariantRepository variantRepository;
     private final ProductRepository productRepository;
+    private final CartItemRepository cartItemRepository;
     private final ProductAdapter productAdapter;
 
 
@@ -138,10 +140,13 @@ public class VariantServiceImpl implements VariantService {
             throw new InvalidRequestException("Variant " + variantId + " is the only variant of product "
                     + product.getId() + "; delete the product instead of its last variant");
         }
+        // A size+colour that no longer exists cannot be priced or stock-checked, so every live
+        // cart holding it would fail on read. Retire those lines last: the bulk update clears the
+        // persistence context, and the stock mirror above still needs a managed product.
         variantRepository.deleteById(variantId);
         resyncProductStock(product);
+        cartItemRepository.retireByVariant(variantId);
     }
-
     /**
      * products.stock is a mirror of the variant rows. Recomputing it after every variant write
      * is what stops the legacy column and the real stock from drifting apart, which would make

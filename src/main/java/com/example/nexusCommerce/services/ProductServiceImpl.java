@@ -36,9 +36,11 @@ import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
+import com.example.nexusCommerce.repositories.CartItemRepository;
 import com.example.nexusCommerce.repositories.ProductImageRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ProductVariantRepository;
+import com.example.nexusCommerce.repositories.WishlistItemRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductImage;
@@ -59,6 +61,8 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepository categoryRepository;
     private final ProductVariantRepository variantRepository;
     private final ProductImageRepository imageRepository;
+    private final CartItemRepository cartItemRepository;
+    private final WishlistItemRepository wishlistItemRepository;
     private final ProductAdapter productAdapter;
 
     @Transactional(readOnly = true)
@@ -324,9 +328,13 @@ public class ProductServiceImpl implements ProductService {
                 .collect(Collectors.toList());
     }
 
+    // The facet vocabulary is derived from the variants of *active, live* products, so flipping
+    // isActive here removes (or restores) every size and colour that style sells. Without these
+    // two caches the storefront keeps offering a filter that now returns an empty page.
     @Transactional
     @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS,
-            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE }, allEntries = true)
+            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE,
+            VARIANT_SIZE_VALUES, VARIANT_COLOR_VALUES }, allEntries = true)
     @Override
     public GetProductResponseDto updateProduct(Long id, UpdateProductRequestDto requestDto){
         Product product = productRepository.findById(id)
@@ -438,15 +446,28 @@ public class ProductServiceImpl implements ProductService {
         return productAdapter.mapToGetProductResponseDto(productRepository.save(product));
     }
 
+    // A style that is gone cannot be bought in any of its sizes. Leaving the variant rows live
+    // would keep their SKUs claimed by the unique index forever and let an admin edit stock on
+    // a product that no reader can find, so the whole grid is retired with the product. Live
+    // carts and saved wishes are retired for the same reason: a line whose product no longer
+    // resolves makes GET /cart throw for that shopper, and a wish that cannot be bought is a
+    // broken promise. Reviews are NOT retired here — they are purchase history, and Review keeps
+    // readable through the soft-delete restriction via its read-only FK mirrors.
     @Transactional
     @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS,
-            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE }, allEntries = true)
+            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE,
+            VARIANT_SIZE_VALUES, VARIANT_COLOR_VALUES }, allEntries = true)
     @Override
     public void deleteProduct(Long id){
         if (!productRepository.existsById(id)) {
             throw new ResourceNotFoundException("Product with id: " + id + " Not Found!");
         }
+        variantRepository.findByProductIdOrderBySizeAscColorNameAsc(id)
+                .forEach(variant -> variantRepository.deleteById(variant.getId()));
+        imageRepository.findByProductIdOrderByPositionAsc(id).forEach(imageRepository::delete);
         productRepository.deleteById(id);
+        cartItemRepository.retireByProduct(id);
+        wishlistItemRepository.retireByProduct(id);
     }
 
     @Transactional(readOnly = true)

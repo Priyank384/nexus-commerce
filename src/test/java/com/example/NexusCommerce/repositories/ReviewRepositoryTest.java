@@ -17,7 +17,9 @@ import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Pageable;
 
+import com.example.nexusCommerce.adapters.ReviewAdapter;
 import com.example.nexusCommerce.configs.JpaAuditingConfig;
+import com.example.nexusCommerce.dtos.GetReviewResponseDto;
 import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Order;
@@ -37,6 +39,9 @@ class ReviewRepositoryTest {
 
     @Autowired
     private ReviewRepository reviewRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
 
     private Order firstOrder;
     private Order secondOrder;
@@ -117,5 +122,25 @@ class ReviewRepositoryTest {
     @Test
     void existsByOrderIdAndProductId_whenReviewDoesNotExist_returnsFalse() {
         assertFalse(reviewRepository.existsByOrder_IdAndProduct_Id(secondOrder.getId(), phone.getId()));
+    }
+
+    @Test
+    void reviewStaysReadableWhenTheReviewedProductIsRetired() {
+        productRepository.deleteById(phone.getId());
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        List<Review> surviving = reviewRepository
+                .findByProductId(phone.getId(), Pageable.unpaged()).getContent();
+
+        assertEquals(1, surviving.size());
+        // A review is purchase history: the soft-deleted product still satisfies the FK, so the
+        // row survives. What would break is mapping it — the association is gone but the read-only
+        // FK mirror is not, and that is what the response DTO is built from.
+        GetReviewResponseDto dto = new ReviewAdapter().mapToGetReviewResponseDto(surviving.get(0));
+
+        assertEquals(phone.getId(), dto.getProductId());
+        assertEquals(firstOrder.getId(), dto.getOrderId());
+        assertEquals("Great phone", dto.getComment());
     }
 }
