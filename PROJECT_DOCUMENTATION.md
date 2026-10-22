@@ -24,6 +24,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 16. [CI, Docker & deployment](#16-ci-docker--deployment)
 17. [Idempotency, rate limiting & domain events](#17-idempotency-rate-limiting--domain-events)
 18. [Frontend workspace](#18-frontend-workspace)
+19. [Phase 2a — apparel catalogue, wishlists, addresses and payments](#19-phase-2a--apparel-catalogue-wishlists-addresses-and-payments)
 
 ---
 
@@ -497,7 +498,8 @@ Design guarantees that are worth knowing before modifying the domain:
 - **Optimistic locking** — `Order` has a `@Version` column (added in `V8`); its soft-delete SQL is version-guarded so concurrent writers collide instead of silently overwriting.
 - **Oversell-safe stock** — Reserving/adjusting stock uses an atomic conditional bulk UPDATE (`WHERE stock >= :qty`). Zero affected rows means insufficient stock and the whole transaction rolls back, so partial oversells cannot commit. Returning stock on delete/remove is an atomic `increaseStock`.
 - **Line-item snapshots** — `order_products` stores `unit_price` (`V11`) plus `product_name` / `product_image` (`V12`), all backfilled. Editing a price, renaming, or soft-deleting a product therefore cannot rewrite historical orders or revenue, and a deleted product's line item still renders (the read path no longer inner-joins products).
-- **Uniqueness that survives soft-delete** — Flyway generated columns mirror each unique key only for live rows (`V8` unique names, `V10` one live review per `(order, product)`, `V13` one live cart per user and one live `(cart, product)` line). Deleting a row frees the slot without a partial index.
+- **Uniqueness that survives soft-delete** — Flyway generated columns mirror each unique key only for live rows (`V8` unique names, `V10` one live review per `(order, product)`, `V13` one live cart per user, `V22` one live `(cart, variant)` line). Deleting a row frees the slot without a partial index.
+- **Retiring a style retires the live rows that point at it** — `deleteProduct` also retires the product's variants, images, cart lines and wishlist items; `VariantService.delete` retires the cart lines for that size+colour. A fetch-join onto a soft-deleted target throws `FetchNotFoundException` rather than yielding null, so a dangling cart line would make `GET /cart` answer 500 for that shopper, and a variant left behind keeps its SKU claimed by the unique index forever. Purchase history is *not* retired: a `Review` row survives (its FKs still resolve to a soft-deleted target) and maps from read-only FK mirrors, so a review of a discontinued style stays readable.
 - **Idempotency on writes** — Order and cart-checkout accept `Idempotency-Key`. First call writes `__IN_FLIGHT__` (TTL 10 min), on success overwrites with the JSON response (TTL 24 h), on failure deletes the key. Concurrent same-key → `400 InvalidRequestException`. Re-acquisition of an expired in-flight marker uses a **second `SETNX`** rather than a plain `SET`, so two racing clients cannot both take over.
 - **Revocation is Redis-backed** — Logout writes `jwt:blacklist::<jti>` with TTL = remaining token life. Refresh tokens live only as opaque random 32-byte values keyed by `refresh::<token>` with rotation on every refresh — a stolen refresh token can only be used once.
 - **Schema is code** — `ddl-auto: validate`; **Flyway** owns DDL. Add a new `V__` migration for any change — never edit an applied one.
@@ -520,6 +522,16 @@ Design guarantees that are worth knowing before modifying the domain:
 | `V12__snapshot_order_product_identity` | `order_products.product_name` / `product_image` snapshot (backfilled) |
 | `V13__shopping_carts` | `carts` + `cart_items` tables with generated live-scope uniqueness columns |
 | `V14__seed_admin_role` | Dev-only seed: promote `root-admin@nexuscommerce.test` to `ADMIN` (delete before real deployment) |
+| `V15__category_hierarchy` | `parent_id` self-reference for a two-level nav tree (Men → Tees), plus `description` and `slug` |
+| `V16__product_variants` | `product_variants`: size+colour SKUs with own stock and price delta. Historic products get a synthetic `ONE / Default` row so old orders, cart and wishlist lines still resolve |
+| `V17__product_images` | Ordered gallery per product; `position = 0` is the thumbnail. `products.image` stays for order-snapshot compatibility |
+| `V18__product_metadata` | brand, material, care, gender, compare-at price, slug, `is_active` (hide without soft-deleting order history); legacy rows backfilled |
+| `V19__wishlists` | `wishlists` + `wishlist_items`, one default list per user plus named lists; live `(user, name)` uniqueness via a generated column so a soft-deleted list frees the name |
+| `V20__addresses_payment_and_variant_scoped_lines` | `addresses`, payment reference columns, and `variant_id` on order/cart lines. New orders snapshot the shipping address as JSON so editing a saved address cannot rewrite history |
+| `V21__seed_plain_thread_catalogue` | Plain Thread seed: ~30 apparel products × 4 sizes × 3 colours (360 SKUs). Soft-deletes the pre-Phase-2 demo catalogue so its orders and reviews survive |
+| `V22__variant_scoped_cart_lines` | Completes the variant swap on carts: every live line gets a `variant_id`, the column becomes NOT NULL, and live uniqueness moves from `(cart, product)` to `(cart, variant)` so a Medium and a Large of the same shirt can coexist |
+| `V23__razorpay_payment_tracking` | `payment_intent_id` (our reference before money moves) and `paid_datetime`, indexed for the webhook lookup that arrives with no user context |
+| `V24__remember_intent_amount` | `payment_amount_paise`, the price the stored intent was issued at — see the payment section for why a repeat request must not silently replace it |
 
 > **Why V7 uses a stored procedure.** On a fresh MySQL 8.4 database, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` makes the server **automatically drop** the FK-supporting index `fk_review_order`, because the composite already covers it. An unconditional `DROP INDEX fk_review_order` therefore fails with `1091 Can't DROP` — exactly what broke CI before commit `2afc8e8`. V7 now wraps both drops in `drop_index_if_present`, which reads `information_schema.STATISTICS` first and no-ops when the index isn't there. This lets one migration apply cleanly to both fresh CI databases and older dev databases that pre-date the composite.
 
@@ -533,8 +545,9 @@ Redis stores five logically distinct kinds of state. Every key carries a namespa
 
 Spring's **cache abstraction** (`@EnableCaching`) backed by **`RedisCacheManager`** over **Lettuce**. Service methods are annotated declaratively — there is no manual cache-aside code.
 
-- **Values:** JSON via a Jackson serializer; keys are strings. At runtime Spring prefixes the key with the cache name, e.g. `product:by-id::1`, `order:all::0:20`.
-- **TTLs (per cache):** list caches **5 min**, single-item caches **10 min**, aggregate `product:unique-categories` **15 min**.
+- **Values:** JSON via a Jackson serializer — polymorphic typing is allowed **only** for `com.example.nexusCommerce.` classes, so a poisoned cache entry cannot be deserialized into an arbitrary type. Keys are strings. At runtime Spring prefixes the key with a per-database namespace and the cache name, e.g. `nexuscommerce:product:by-id:1`, `defaultdb:order:all:0:20`.
+- **Key namespace:** `CacheConfig.datasourceNamespace()` derives the prefix from the schema name in `spring.datasource.url` (query string and non-`[A-Za-z0-9_-]` characters stripped, `default` if there is nothing to read). Two databases sharing one Redis — e.g. local MySQL and a hosted Postgres — therefore cannot serve each other's cached rows.
+- **TTLs (per cache):** list caches **5 min**, single-item caches **10 min**, aggregate `product:unique-categories` **15 min**. Each TTL carries ±10 % jitter so a fleet of entries does not expire in lockstep and stampede the database.
 - **Null caching:** on — a lookup of a non-existent id is memoized so it cannot hammer the DB.
 - **Transaction-aware:** puts/evictions are deferred until the surrounding transaction commits.
 - **Resilience:** a `CacheErrorHandler` degrades to the database on Redis failures, and 500 ms timeouts bound any hang. A local fallback (`spring.cache.type` != `redis`) uses an in-memory cache manager.
@@ -545,11 +558,16 @@ Spring's **cache abstraction** (`@EnableCaching`) backed by **`RedisCacheManager
 |------------|-----|--------------|------------|
 | `product:all` | `page:size` | list | product/category writes (all entries) |
 | `product:by-id` | `id` | get by id | product updates (all entries) |
+| `product:by-slug` | lower-cased slug | product detail page | product updates (all entries) |
 | `product:details` | `id` | get with details | product updates (all entries) |
-| `product:by-category` | `name:page:size` | search by category | product/category writes |
+| `product:by-category` | `name:page:size` | find by category name | product/category writes |
+| `product:search` | `gender\|slug\|sizes\|colors\|min\|max\|sort\|page\|size` | faceted search | product/variant/category writes |
 | `product:unique-categories` | — | distinct category names | product writes |
+| `variant:sizes` | — | `/products/facets/sizes` | product/variant writes |
+| `variant:colors` | — | `/products/facets/colors` | product/variant writes |
 | `category:all` | `page:size` | list | category writes |
 | `category:by-id` | `id` | get by id | category writes |
+| `category:tree` | — | `/categories/tree` | category writes |
 | `order:all` | `page:size` | admin list | order writes (all entries) |
 | `order:by-id` | `id` | get order | order writes on that id |
 | `order:summary` | `id` | get summary | order writes on that id |
@@ -559,6 +577,11 @@ Spring's **cache abstraction** (`@EnableCaching`) backed by **`RedisCacheManager
 | `review:by-order` | `orderId:page:size` | by order | review writes |
 
 Because list keys include `page`/`size`, list evictions use `allEntries = true`.
+
+Two rules keep this cache from becoming a memory leak or a correctness hazard:
+
+- **Keys are built from validated, normalised input only.** `ProductSearchRequestDto` lower-cases, trims, sorts and de-dupes every facet before `cacheKey()` runs, and the controller clamps `size` at the web boundary — so `?sizes=M,L` and `?sizes=l,m` share one entry, and `?size=99999` cannot fragment the cache.
+- **Unknown values throw before the query.** An unrecognised `categorySlug`, `gender`, `sort`, or a size/colour no product sells in is rejected (**400**, or **404** for a missing category) *before* any result exists. Exceptions are never cached, so arbitrary strings cannot mint entries.
 
 ### 10.3 Refresh tokens (`RefreshTokenService`)
 
@@ -739,31 +762,58 @@ Send the request with `Authorization: Bearer <current-access-token>`. Response h
 | GET | `/` | Public | page/size | `product:all` |
 | GET | `/{id}` | Public | — | `product:by-id` |
 | GET | `/{id}/details` | Public | — | `product:details` |
-| GET | `/search?categoryName=` | Public | + page/size | `product:by-category` |
+| GET | `/slug/{slug}` | Public | — | `product:by-slug` |
+| GET | `/search` | Public | `gender`, `categorySlug`, `sizes`, `colors`, `minPrice`, `maxPrice`, `sort`, `page`, `size` | `product:search` |
+| GET | `/by-category/{categoryName}` | Public | + page/size | `product:by-category` |
 | GET | `/uniqueCategories` | Public | — | `product:unique-categories` |
+| GET | `/facets/sizes` | Public | — | `variant:sizes` |
+| GET | `/facets/colors` | Public | — | `variant:colors` |
+| GET | `/{id}/variants` | Public | — | — |
 | POST | `/` | ADMIN | below | evict |
 | PUT | `/{id}` | ADMIN | below (partial) | evict |
-| DELETE | `/{id}` | ADMIN | — | evict (soft delete) |
+| DELETE | `/{id}` | ADMIN | — | evict, retires variants, images, cart lines and wishlist items (soft delete) |
+
+`/search` filters are validated before the query: an unknown `gender` or a size/colour that no
+live product sells is a `400`, and a `categorySlug` that names a parent matches its whole subtree.
+`gender` is written **uppercase** (`MEN|WOMEN|UNISEX|KIDS`, enforced by `@Pattern`) but read
+**case-insensitively** — the search DTO normalises before validating, so `?gender=unisex` works.
 
 **POST body (`CreateProductRequestDto`):**
 
 ```json
 {
-  "title": "Wireless Headphones",
-  "description": "Noise-cancelling over-ear headphones",
-  "price": 4999.00,
-  "image": "https://example.com/headphones.png",
+  "title": "Organic Cotton Crew Tee",
+  "description": "Mid-weight jersey knit, garment-dyed.",
+  "price": 890.00,
+  "compareAtPrice": 1100.00,
+  "image": "https://example.com/tee.png",
   "categoryId": 1,
   "rating": 4.5,
-  "stock": 25
+  "stock": 25,
+  "slug": "organic-cotton-crew-tee",
+  "brand": "Plain Thread",
+  "material": "100% organic cotton",
+  "careInstructions": "Machine wash cold",
+  "gender": "UNISEX",
+  "isActive": true,
+  "variants": [
+    { "sku": "PT-TEE-M-BONE", "size": "M", "colorName": "Bone", "colorHex": "#EFE9DD", "priceDelta": 0, "imageUrl": "https://example.com/tee-bone.png", "stock": 12 },
+    { "sku": "PT-TEE-L-BONE", "size": "L", "colorName": "Bone", "colorHex": "#EFE9DD", "priceDelta": 0, "stock": 13 }
+  ],
+  "images": [
+    { "url": "https://example.com/tee.png", "position": 0 }
+  ]
 }
 ```
 
-**PUT body (`UpdateProductRequestDto`)** is a **partial merge** — only non-null fields change (any of `title`, `description`, `price`, `image`, `rating`, `stock`, `categoryId`):
+**PUT body (`UpdateProductRequestDto`)** is a **partial merge** — only non-null fields change (`title`, `description`, `price`, `compareAtPrice`, `image`, `rating`, `stock`, `categoryId`, `slug`, `brand`, `material`, `careInstructions`, `gender`, `isActive`):
 
 ```json
-{ "price": 4599.00, "stock": 40 }
+{ "price": 790.00, "isActive": false }
 ```
+
+Deactivating a style (`isActive: false`) also removes every size and colour it sells from the
+facet vocabulary, because the storefront must not offer a filter that now returns an empty page.
 
 ### 12.5 Cart — `/api/v1/cart` (any authenticated user)
 
@@ -938,10 +988,11 @@ Static files are served from the same base by `WebMvcConfig` (`GET /uploads/**` 
 | Step | Action | API |
 |------|--------|-----|
 | 1 | Load category filters | `GET /products/uniqueCategories` |
-| 2 | Browse Electronics | `GET /products/search?categoryName=Electronics&page=0&size=20` |
-| 3 | Open product page | `GET /products/1/details` |
+| 2 | Browse Electronics | `GET /products/by-category/Electronics?page=0&size=20` |
+| 3 | Browse faceted | `GET /products/search?gender=unisex&sizes=M&colors=Bone&sort=price,asc&page=0&size=20` |
+| 4 | Open product page | `GET /products/1/details` |
 
-No token needed. Repeat step 3 — the second call hits `product:details::1` in Redis.
+No token needed. Repeat step 4 — the second call hits `product:details::1` in Redis.
 
 ### Scenario B: Sign up, log in, place an order (auth)
 
@@ -1029,11 +1080,12 @@ Historical orders are immutable in effect: the line items keep their snapshotted
 | **404** | `ResourceNotFoundException` | `Product with id: 99 Not Found!` |
 | **405** | `HttpRequestMethodNotSupportedException` | `Request method 'DELETE' not supported` |
 | **409** | `DuplicateResourceException` | `A review already exists for this order and product` |
-| **400** | `InvalidRequestException` / Bean Validation / ownership guard / **missing required query param** / concurrent idempotency-key collision | `You can only access your own orders`, `stock must not be negative`, `Order cannot be modified in DELIVERED/CANCELLED status`, `Required request parameter 'categoryName' is not present` |
+| **400** | `InvalidRequestException` / Bean Validation / ownership guard / disallowed `sort` field / **missing required query param** / concurrent idempotency-key collision | `You can only access your own orders`, `stock must not be negative`, `Order cannot be modified in DELIVERED/CANCELLED status`, `sort field not allowed: bogus`, `No products are sold in size 'zzz'`, `Required request parameter 'file' is not present` |
 | **429** | `LoginRateLimiterInterceptor` over threshold | `message: "Too many login attempts"`, `error: "Rate limit exceeded"` |
+| **502** | `PaymentProviderException` — Razorpay unconfigured, unreachable, or refused the request | `error: "Payment provider unavailable!"`, `message:` the upstream reason |
 | **500** | Unhandled | `Something went wrong!` + exception message |
 
-`401`/`403` are emitted by the security filter in the same `ApiResponse` shape as the rest of the API. `405`, missing-param `400`, and `429` are emitted by `GlobalExceptionHandler` and the interceptor directly; all three use the standard envelope.
+`401`/`403` are emitted by the security filter in the same `ApiResponse` shape as the rest of the API. `405`, missing-param `400`, `429` and `502` are emitted by `GlobalExceptionHandler` and the interceptor directly; all use the standard envelope. A payment-provider failure is `502` rather than `500` on purpose: it is a dependency fault, not a bug in this service, and the shopper can retry.
 
 ---
 
@@ -1050,7 +1102,7 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 ### Public reads (cache)
 
 - [ ] `GET /api/v1/categories` ×2 → `GET /api/v1/categories/1` ×2
-- [ ] `GET /api/v1/products` ×2 → `/products/1` ×2 → `/products/1/details` ×2 → `/products/search?categoryName=Electronics` ×2 → `/products/uniqueCategories` ×2
+- [ ] `GET /api/v1/products` ×2 → `/products/1` ×2 → `/products/1/details` ×2 → `/products/by-category/Electronics` ×2 → `/products/search?gender=unisex&sizes=M` ×2 → `/products/facets/sizes` ×2 → `/products/uniqueCategories` ×2
 - [ ] `GET /api/v1/reviews` ×2 → `/reviews/{id}` ×2 → `/reviews/product/1` ×2 → `/reviews/order/{id}` ×2
 
 ### Cart (authenticated)
@@ -1104,6 +1156,9 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 - [ ] After `PUT /admin/products/{id}/stock`, a subsequent `GET /products` is fresh (eviction, not TTL)
 - [ ] `PUT /orders/{id}` on a `DELIVERED` order → **400**
 - [ ] `DELETE /orders/{id}` (ADMIN) → line items soft-deleted; reserved stock returned
+- [ ] `DELETE /products/{id}` (ADMIN) → its variants and images disappear, a shopper's cart that held the style still returns **200** with the line gone, the wishlist card is gone, and `GET /products/facets/sizes` no longer advertises a size only that style sold
+- [ ] `DELETE /products/{id}/variants/{variantId}` (ADMIN) → carts holding that size+colour drop the line, `products.stock` re-mirrors to the remaining variants
+- [ ] `GET /reviews/product/{id}` for a retired product → still **200** with `productId` populated (history survives the catalogue write)
 - [ ] Wrong HTTP method on a known path (e.g. `DELETE /api/v1/auth/login`) → **405**
 
 ### End-to-end journey
@@ -1333,13 +1388,185 @@ The frontend refuses to start if `API_BASE_URL` is unset (see `src/lib/api/backe
 
 ---
 
+## 19. Phase 2a — apparel catalogue, wishlists, addresses and payments
+
+Everything the "PLAIN THREAD" storefront needs that a generic demo catalogue could not give it.
+
+### Variants are the unit of stock
+
+A `Product` is a family; a `ProductVariant` is one purchasable **size + colour** with its own
+stock, price delta and swatch image. `products.stock` survives as a legacy aggregate (kept in
+sync by summing variants) so the admin low-stock report and any old reader stay honest.
+
+Selling price is `product.price + variant.priceDelta`, computed at purchase and snapshotted onto
+the line, so a later reprice cannot rewrite what somebody paid.
+
+`VariantResolver` is the only place that decides what "no variantId supplied" means:
+
+| situation | outcome |
+|-----------|---------|
+| `variantId` given | used, after checking it belongs to that product |
+| product has exactly one variant | that variant (V16 backfilled every pre-apparel row to `ONE / Default`) |
+| product has several variants | **400** — guessing a size is how wrong garments get shipped |
+| product has no variant | **400** |
+
+Cart and order lines are variant-scoped since V22, and live cart uniqueness is
+`(cart, variant)` rather than `(cart, product)` — so a Medium and a Large of the same shirt can
+sit in one cart.
+
+### Faceted search
+
+`GET /api/v1/products/search` filters on `sizes`, `colors`, `gender`, `categoryId`,
+`minPrice`/`maxPrice` and `sort`. Size and colour use `EXISTS` against variants (a join would
+multiply rows), match case-insensitively, and repeat values collapse before the cap of 12 per
+facet.
+
+```json
+{ "note": "query parameters, not a body" }
+```
+
+| request | response |
+|---------|----------|
+| `?sizes=M&sizes=L&colors=Black&sort=price,desc` | `200` page of matching products |
+| `?sort=nonsense` | `400` — `sort field not allowed: nonsense` |
+| `?sizes=S&sizes=S...` (20 repeats) | `200` — duplicates collapse, so the cap is not tripped |
+| `?sizes=ZZZ` | `400` — `No products are sold in size 'zzz'` |
+
+An unknown facet value is a **400**, not an empty `200`: a storefront typo then surfaces as an
+error instead of a mysteriously blank category page.
+
+The two facet lists the nav builds itself from are cached aggregates:
+
+```
+GET /api/v1/products/facets/sizes    → ["L","M","S","XL"]
+GET /api/v1/products/facets/colors   → ["Black","Bone","Olive"]
+```
+
+### Wishlists
+
+Reads never create a row — the first hover of the heart shows an empty list, and the default
+wishlist is materialised when something is actually saved.
+
+```json
+// POST /api/v1/wishlist
+{ "name": "Summer" }
+
+// POST /api/v1/wishlist/items        (no list id: saves to the default list)
+{ "productId": 1101, "variantId": 181 }
+
+// DELETE /api/v1/wishlist/items/1101  (default list, by product id)
+```
+
+Re-saving a product that is already wishlisted **restates** the chosen size+colour instead of
+adding a second line, because `(wishlist, product)` is unique among live rows.
+
+### Addresses
+
+Shipping and billing addresses are saved separately from the order. A new order snapshots the
+address as JSON onto the order row, so editing a saved address later cannot rewrite where a past
+parcel went.
+
+```json
+// POST /api/v1/addresses
+{
+  "label": "Home",
+  "recipientName": "Priyank Gupta",
+  "phone": "9999999999",
+  "line1": "12 Thread Street",
+  "line2": null,
+  "city": "Bengaluru",
+  "state": "Karnataka",
+  "pincode": "560001",
+  "isDefaultShipping": true,
+  "isDefaultBilling": true
+}
+
+// PUT /api/v1/addresses/{id}/default?shipping=true&billing=false
+```
+
+### Razorpay payments
+
+Money state and fulfilment state are tracked apart: `orderStatus` answers *where the parcel is*,
+`paymentStatus` (`CREATED` / `PAID` / `FAILED`) answers *whether it was paid*. An order can be
+`PAID` and still `PENDING`.
+
+| step | endpoint | what happens |
+|------|----------|--------------|
+| 1 | `POST /api/v1/payments/razorpay/orders/{orderId}` | prices the order, creates a Razorpay order, returns `{ razorpayOrderId, keyId, amount, totalPrice }` |
+| 2 | *browser → Razorpay Checkout* | card details never reach this server, which is what keeps us out of PCI scope |
+| 3 | `POST /api/v1/payments/razorpay/orders/{orderId}/verify` | `{ razorpayPaymentId, razorpaySignature }` — HMAC recomputed over the **stored intent** |
+| 4 | `POST /api/v1/payments/razorpay/webhook` | Razorpay's own confirmation, signed over the raw body bytes |
+
+```json
+// POST /api/v1/payments/razorpay/orders/12 → 200
+{
+  "orderId": 12,
+  "razorpayOrderId": "order_Tr2aP9AGsMJjmI",
+  "keyId": "rzp_test_…",
+  "currency": "INR",
+  "totalPrice": 2670.0,
+  "amount": 267000
+}
+
+// POST /api/v1/payments/razorpay/orders/12/verify
+{ "razorpayPaymentId": "pay_…", "razorpaySignature": "…" }
+
+// GET /api/v1/payments/orders/12/status → 200
+{
+  "orderId": 12, "orderStatus": "PENDING", "paymentStatus": "PAID",
+  "totalPrice": 2670.0, "currency": "INR",
+  "razorpayOrderId": "order_…", "razorpayPaymentId": "pay_…",
+  "paidAt": "2026-10-22T23:02:08.330603"
+}
+```
+
+Three rules make this survivable, and each one closed a bug rather than being decoration:
+
+- **A signature is checked against the intent this server stored**, never against an id the
+  client sent — otherwise a payload could point at somebody else's order.
+- **Settling is a conditional UPDATE, not a read-then-save.** A client verify and Razorpay's
+  webhook routinely land together; both used to win, mailing two confirmations for one payment
+  and losing a write. Exactly one caller sees a row count of 1 and only that caller notifies. A
+  `payment.failed` for one instrument can no longer reopen an order another instrument paid, nor
+  blank its captured reference.
+- **A repeat `createPayment` reuses the intent while the order still prices the same** (V24
+  records the amount). Issuing a fresh one each time left the previous intent live at Razorpay
+  but unreachable from any row here — paying it captured money against an order that could never
+  be resolved.
+
+The webhook is `permitAll` (it carries its own HMAC), is fed as raw bytes rather than a parsed
+body, and answers `2xx` even for an unknown intent so Razorpay stops retrying.
+
+**Configuration** — credentials only ever come from the environment; empty defaults keep the app
+bootable and make payment endpoints answer `502` with an actionable message:
+
+```yaml
+razorpay:
+  base-url: ${RAZORPAY_BASE_URL:https://api.razorpay.com/v1}
+  key-id: ${RAZORPAY_KEY_ID:}
+  key-secret: ${RAZORPAY_KEY_SECRET:}
+  webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  currency: ${RAZORPAY_CURRENCY:INR}
+```
+
+### One root cause behind four bugs
+
+Four findings from the live sweep shared a single mechanism: a read-only
+`@Column(insertable = false, updatable = false)` FK mirror is **null on a just-saved entity**, so
+any response mapping it echoed `null`. Wishlist items lost `productId`, checkout and order line
+items lost `productId`/`variantId`, `DELETE /wishlist/items/{productId}` 400'd, and an ownership
+check NPE'd on a list created moments earlier. Each site now falls back to the association, which
+is free to read even through a lazy proxy.
+
+---
+
 ## Document info
 
 | Field | Value |
 |-------|-------|
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
-| Schema version (Flyway) | **V14** |
+| Schema version (Flyway) | **V24** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
 | Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.

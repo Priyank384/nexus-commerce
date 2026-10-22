@@ -2,7 +2,7 @@
 
 > **Full project guide:** [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) — setup, tech stack, architecture, API flows, payloads, Redis keys, real-life scenarios, and testing checklists.
 
-NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: **categories**, **products** (with stock/inventory and image upload), a persistent **shopping cart**, **orders** (with snapshotted line items), and **reviews** tied to both an order and a product. It is secured with **JWT authentication** (access + rotating refresh token, Redis-backed revocation), **role-based authorization** (`USER` / `ADMIN`), backed by **MySQL**, versioned by **Flyway** migrations with `ddl-auto: validate`, cached in **Redis**, observable through **Actuator + Micrometer/Prometheus** and optionally the **New Relic** APM agent, containerised via a multi-stage **Dockerfile**, and shipped with a **GitHub Actions** CI that boots the app against real MySQL + Redis.
+NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("Plain Thread") and a general e-commerce domain: **hierarchic categories**, **products** with per-**variant** (size + colour) stock, a persistent **shopping cart**, **orders** (with snapshotted, variant-scoped line items), **reviews** tied to both an order and a product, **wishlists**, **address book**, and **Razorpay payments**. It is secured with **JWT authentication** (access + rotating refresh token, Redis-backed revocation) and **role-based authorization** (`USER` / `ADMIN`), backed by **MySQL or PostgreSQL** (chosen by env, with a parallel Flyway set per dialect), versioned by **Flyway** migrations with `ddl-auto: validate`, cached in **Redis**, observable through **Actuator + Micrometer/Prometheus** and optionally the **New Relic** APM agent, containerised via a multi-stage **Dockerfile**, and shipped with a **GitHub Actions** CI that boots the app against real MySQL + Redis.
 
 ---
 
@@ -10,10 +10,14 @@ NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: *
 
 - **Auth & roles** — Register (`POST /api/v1/users`), log in (`POST /api/v1/auth/login`), refresh (`POST /api/v1/auth/refresh`) and log out (`POST /api/v1/auth/logout`). Access tokens are stateless **JWT bearer** tokens; refresh tokens are opaque, single-use values stored in Redis with rotation on every refresh. Logging out blacklists the current `jti` in Redis for the rest of its lifetime. Two roles, `USER` and `ADMIN`, gate every endpoint (see [Authentication & roles](#authentication--roles)).
 - **Login rate limiting** — Fixed-window, IP-keyed Redis counter on `POST /api/v1/auth/login` (default **10 / 60 s**, tunable via `LOGIN_RATE_MAX` / `LOGIN_RATE_WINDOW_SECONDS`). Over-limit returns **429** with the standard `ApiResponse` envelope.
-- **Categories** — Create, list (paged), get by id, update, and delete categories. Deleting a category that still holds live products is rejected.
-- **Products** — CRUD-style operations, fetch with category details, search by category name, list distinct category names, per-product **stock** tracking, and admin image upload (`POST /api/v1/admin/products/{id}/image`) that persists PNG/JPEG/WebP files to disk and rewrites the product's `image` URL to a served path (`/uploads/products/<file>`).
-- **Shopping cart** — Persistent per-user cart (V13), backed by its own table so state survives closing the browser. Add / update / remove lines, clear, and **checkout** (which converts the cart into an order through the same stock + snapshot pipeline).
-- **Inventory** — Placing an order atomically decrements stock (oversell-safe); admins restock via `PUT /api/v1/admin/products/{id}/stock`.
+- **Categories** — Create, list (paged), get by id, update, delete, and fetch the whole **`/categories/tree`** in one call (V15 gives categories a `parent_id`, so Men → Tops and Women → Tops are distinct branches). Deleting a category that still holds live products (or children) is rejected.
+- **Products & variants** — CRUD-style operations, fetch with category details, per-product **stock** tracking, and admin image upload (`POST /api/v1/admin/products/{id}/image`) that persists PNG/JPEG/WebP files to disk and rewrites the product's `image` URL to a served path (`/uploads/products/<file>`). Each product carries **size × colour variants** (V16), and **the variant is the unit of stock** — `S/Black` selling out never blocks `M/Black`. Admins manage variants via `POST /products/{id}/variants`, `PUT /products/variants/{variantId}`, `DELETE /products/variants/{variantId}`.
+- **Faceted search** — `GET /api/v1/products/search` filters by `gender`, `categorySlug` (a parent slug matches its whole subtree), `minPrice`/`maxPrice`, `sizes`, `colors` and sorts by `id`, `price`, `rating`, `createdAt` or `title`. Unknown sort or facet values are rejected with **400** instead of answering with an empty page — which also stops arbitrary strings from minting unbounded cache entries. `GET /products/facets/sizes` and `/facets/colors` publish the filter vocabulary, computed only from the variants of **active, live** products — deactivating or deleting a style takes its sizes and colours out of the facets, so the storefront can never offer a filter that answers with an empty page.
+- **Shopping cart** — Persistent per-user cart (V13, variant-scoped in V22), backed by its own table so state survives closing the browser. Add / update / remove lines, clear, and **checkout** (which converts the cart into an order through the same stock + snapshot pipeline). A line is keyed on `(cart, variant)`, so the same tee in two sizes is two lines.
+- **Wishlists** — Multi-list, per-user (`/api/v1/wishlist`). Create and delete named lists, save a product to the default list or a specific one, remove by product id, all owner-scoped. Saving a product already on the list restates it instead of duplicating.
+- **Address book** — `/api/v1/addresses`: save, list, update, delete, and mark a default for shipping or billing. The first address is the default; a later one cannot steal that slot silently.
+- **Payments (Razorpay)** — Server-side intent creation, browser Checkout, signature-verified capture, and a webhook reconciler (`/api/v1/payments/**`). Three invariants make it safe: signatures are recomputed over the **stored** intent, never over a client-supplied id; settling is a **conditional UPDATE**, so a client verify and Razorpay's webhook racing for the same order produce exactly one confirmation mail; and a repeat `createPayment` **reuses the intent** while the order still prices the same (V24 records the amount). See [Phase 2a in PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#19-phase-2a--apparel-catalogue-wishlists-addresses-and-payments).
+- **Inventory** — Placing an order atomically decrements **variant** stock (oversell-safe); admins restock a product via `PUT /api/v1/admin/products/{id}/stock` or a single variant via `PUT /api/v1/products/variants/{variantId}`.
 - **Orders** — Create orders from a list of line items (product id + quantity), list/fetch/update/delete orders, fetch an order **summary**, and read **your own orders** (`/me`) or any user's (admin). Line items are **snapshotted** (price, name, image) so history never changes when the catalogue is edited. Both `POST /orders` and `POST /cart/checkout` accept an optional **`Idempotency-Key`** header so a retried submission can never place a duplicate order.
 - **Reviews** — Create reviews only when the product appears on the given order; at most **one review per (order, product)** pair; list reviews globally, by id, by product, or by order; delete by id (admin).
 - **Admin dashboard** — Aggregate business metrics, paged user listing, and user role/enable management (all `ROLE_ADMIN`).
@@ -21,7 +25,7 @@ NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: *
 - **Data integrity** — Soft-delete on every entity, `@Version` optimistic locking on orders, and DB-level uniqueness that survives soft-deletes (see [Data integrity & migrations](#data-integrity--migrations)).
 - **Consistent JSON envelope** — All controllers return an `ApiResponse<T>` wrapper (`success`, `message`, `error`, `data`); paged endpoints wrap a `PageResponse<T>`.
 - **Global error handling** — Mapped HTTP statuses for not found, conflict, bad request, unauthorized, forbidden, method-not-supported, missing required query param, rate-limited, and generic server errors.
-- **Database migrations** — Flyway applies versioned SQL (`V1`–`V14`) under `src/main/resources/db/migration`.
+- **Database migrations** — Flyway applies versioned SQL (`V1`–`V24`) from `src/main/resources/db/migration` (MySQL) or `db/migration-postgres` (PostgreSQL), selected by `FLYWAY_LOCATIONS`.
 - **API documentation** — OpenAPI 3 + Swagger UI (springdoc), with a bearer-authorization scheme pre-wired, alphabetical tag/operation sorters and doc collapsed by default.
 - **Observability** — Spring Boot Actuator exposing `health`, `info`, `metrics`, `prometheus`. Liveness/readiness probes are public (for the platform), everything else under `/actuator/**` is `ROLE_ADMIN`. New Relic Java agent attaches automatically when `newrelic/newrelic.jar` is present.
 - **Graceful shutdown** — `server.shutdown: graceful` + `spring.lifecycle.timeout-per-shutdown-phase: 30s`; combined with the probes, that makes rolling restarts safe.
@@ -38,11 +42,12 @@ NexusCommerce is a **Spring Boot** REST backend for a small e-commerce domain: *
 | Framework | Spring Boot **4.0.2** |
 | Persistence | Spring Data JPA, Hibernate |
 | Security | **Spring Security** (stateless) + **JWT** (`jjwt`) + BCrypt password hashing + Redis-backed refresh-token store, jti blacklist and login rate limiter |
-| Database | **MySQL** (Connector/J) |
-| Migrations | **Flyway** (MySQL support) — `V1`–`V14` |
+| Database | **MySQL** (Connector/J) or **PostgreSQL** (e.g. Aiven) — whichever the `DB_*` env vars point at; no code branch |
+| Migrations | **Flyway** — `V1`–`V24`, with a dialect twin per version (`db/migration` MySQL, `db/migration-postgres` PostgreSQL) selected by `FLYWAY_LOCATIONS` |
 | API docs | **springdoc-openapi** 2.8.x (Swagger UI) |
 | Build | **Gradle** (wrapper) |
-| Cache / session-like state | **Redis** (Spring cache-aside on GET + refresh-token store + JWT blacklist + login rate limit + idempotency replay; see [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#10-redis-caching)) |
+| Cache / session-like state | **Redis** (Spring cache-aside on GET, keys namespaced by database name, plus refresh-token store + JWT blacklist + login rate limit + idempotency replay; see [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#10-redis-caching)) |
+| Payments | **Razorpay** via its REST API (`java.net.http` + Basic auth, no SDK) — test-mode credentials from env only. Browser Checkout talks to Razorpay directly, so card data never reaches this server. |
 | Metrics / health | **Spring Boot Actuator** + **Micrometer** with **Prometheus** registry |
 | APM | **New Relic** Java agent (attached conditionally; see [Observability and monitoring](#observability-and-monitoring)) |
 | Containers | Multi-stage **Dockerfile** (Temurin 21) |
@@ -87,9 +92,10 @@ NexusCommerce is wired for **production-style visibility** through Actuator + Mi
 ## Prerequisites
 
 - **JDK 21**
-- **MySQL** 8.x (project has been validated against **MySQL 8.4** and **MySQL 9.6**; Flyway logs a compatibility notice above 8.1 but applies cleanly).
+- **MySQL** 8.x (validated against **MySQL 8.4** and **MySQL 9.6**; Flyway logs a compatibility notice above 8.1 but applies cleanly) — **or** **PostgreSQL** 13+ (validated against Aiven's managed PostgreSQL; `sslmode=require` in the URL).
 - A database named **`nexuscommerce`** (or adjust the JDBC URL in configuration).
 - **Redis** reachable at `localhost:6379` (or `redis_port` in `.env`) — used for read-through caching, refresh-token storage, JWT revocation, login rate limiting and idempotency replay.
+- **Razorpay test-mode keys** *(optional)* — only needed for `/payments/**`. Without them the app boots and everything else works; a payment call returns **502** saying the gateway isn't configured.
 - **Docker** *(optional)* — for the multi-stage image and the ELK/Redis stack in `docker-compose.yml`.
 
 ---
@@ -103,8 +109,11 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `3001` | Embedded Tomcat HTTP port |
-| `username` | — | MySQL user |
-| `password` | — | MySQL password |
+| `username` / `password` | — | MySQL user / password (the `DB_*` vars below win if set) |
+| `DB_URL` | local MySQL `nexuscommerce` URL with prep-stmt caching | JDBC URL — point it at PostgreSQL to run on the other dialect |
+| `DB_USER` / `DB_PASSWORD` | fall back to `username` / `password` | DB credentials |
+| `DB_DRIVER` | `com.mysql.cj.jdbc.Driver` | Set to `org.postgresql.Driver` for PostgreSQL |
+| `FLYWAY_LOCATIONS` | `classpath:db/migration` | Set to `classpath:db/migration-postgres` to match the DB above |
 | `redis_port` | `6379` | Redis port (host defaults to `localhost`) |
 | `JWT_SECRET` | dev-only string in yml | HMAC signing secret, **≥ 32 bytes** — always override outside local dev |
 | `JWT_EXPIRATION_MINUTES` | `120` | Access-token lifetime |
@@ -112,8 +121,12 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | `LOGIN_RATE_MAX` | `10` | Login attempts per window (per client IP) |
 | `LOGIN_RATE_WINDOW_SECONDS` | `60` | Window length for the login rate limiter |
 | `UPLOAD_DIR` | `uploads/products` | Local filesystem directory for product image uploads; mount a volume in Docker |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | empty | Test/live API keys. Empty secret ⇒ every payment write fails loudly rather than settling on a half-configured gateway |
+| `RAZORPAY_WEBHOOK_SECRET` | empty | HMAC secret Razorpay uses to sign webhook bodies |
+| `RAZORPAY_BASE_URL` | `https://api.razorpay.com/v1` | Override for the sandbox or tests |
+| `RAZORPAY_CURRENCY` | `INR` | Currency stamped on every intent |
 
-**Never commit real secrets.** `.env` is gitignored; the `newrelic/newrelic.yml` license key is deliberately commented out.
+**Never commit real secrets.** `.env` is gitignored; the `newrelic/newrelic.yml` license key is deliberately commented out. Razorpay and Aiven credentials enter **only** through `.env` / env vars.
 
 ```properties
 # Example .env (do not commit)
@@ -127,7 +140,21 @@ JWT_REFRESH_EXPIRATION_DAYS=7
 LOGIN_RATE_MAX=10
 LOGIN_RATE_WINDOW_SECONDS=60
 UPLOAD_DIR=uploads/products
+
+# --- PostgreSQL / Aiven instead of MySQL: replace the four DB_* keys above with ---
+# DB_URL=jdbc:postgresql://host:port/defaultdb?sslmode=require
+# DB_USER=avnadmin
+# DB_PASSWORD=your_db_password
+# DB_DRIVER=org.postgresql.Driver
+# FLYWAY_LOCATIONS=classpath:db/migration-postgres
+
+# --- Razorpay (test mode) ---
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 ```
+
+> **Rotate the New Relic license key** that is still reachable in git history, and treat any shared DB credential as public once it has been pasted into a chat or ticket.
 
 ---
 
@@ -139,6 +166,8 @@ UPLOAD_DIR=uploads/products
    CREATE DATABASE nexuscommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
    ```
 
+   On PostgreSQL, `CREATE DATABASE nexuscommerce;` is enough (managed providers often hand you `defaultdb` instead — just point `DB_URL` at whichever you were given).
+
 2. **Configure** `username`, `password`, and `PORT` as described above.
 
 3. **Start Redis** (default port `6379`) and, if you want the ELK log pipeline, the compose stack (`docker compose up -d`).
@@ -149,7 +178,9 @@ UPLOAD_DIR=uploads/products
    ./gradlew bootRun
    ```
 
-   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V14`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, and the admin seed).
+   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V24`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Plain Thread" seed catalogue, wishlists, addresses and the payment columns).
+
+   To run on **PostgreSQL** instead (validated against Aiven), set the four `DB_*` keys plus `FLYWAY_LOCATIONS=classpath:db/migration-postgres` in `.env` and start the app — no other change is needed. The MySQL set and the PostgreSQL set are edited together; every version has a twin.
 
 5. **Run tests**:
 
@@ -218,11 +249,13 @@ The API is **stateless JWT** with an **opaque, rotating refresh token**. Log in 
 
 | Access | What |
 |--------|------|
-| **Public** (no token) | Register, login, refresh, logout, Swagger, health/liveness/readiness probes, and **browsing**: `GET` products, categories, reviews. Uploaded product images served from `/uploads/**`. |
-| **Any authenticated user** | Cart surface (`GET /cart`, `POST /cart/items`, `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout`), place an order directly, create a review, and read **your own** orders (`/orders/me`, `/orders/{id}`, `/orders/{id}/summary`). Order read/update is scoped so you can only touch orders you own. |
-| **`ROLE_ADMIN` only** | All catalogue **writes** (create/update/delete products & categories), product **image upload**, review **deletion**, the order **list** (`GET /orders`) and order **deletion**, the whole `/api/v1/admin/**` surface, viewing any user's orders, and everything under `/actuator/**` except the health probes. |
+| **Public** (no token) | Register, login, refresh, logout, Swagger, health/liveness/readiness probes, and **browsing**: `GET` products, variants, category tree, facets, reviews. Uploaded product images served from `/uploads/**`. `POST /payments/razorpay/webhook` is also public — it is authenticated by HMAC signature over the raw body, not by a token. |
+| **Any authenticated user** | Cart surface (`GET /cart`, `POST /cart/items`, `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout`), place an order directly, create a review, read **your own** orders (`/orders/me`, `/orders/{id}`, `/orders/{id}/summary`), the whole `/wishlist` and `/addresses` surface, and `/payments/**` for orders you own. Order read/update is scoped so you can only touch orders you own. |
+| **`ROLE_ADMIN` only** | All catalogue **writes** (create/update/delete products, variants & categories), product **image upload**, review **deletion**, the order **list** (`GET /orders`) and order **deletion**, the whole `/api/v1/admin/**` surface, viewing any user's orders, and everything under `/actuator/**` except the health probes. |
 
 **Errors** — Missing/invalid/revoked token on a protected route → `401` (`"Unauthorized!"`); valid token but wrong role / not the owner → `403` (`"Forbidden!"`); too many failed logins → `429`.
+
+**If Redis is down** — the *soft* controls fail open on purpose: the login rate limiter lets the attempt through and a revoked access token is briefly accepted (bounded by its own expiry), because a cache outage must not lock every honest shopper out. The *money-bearing* paths fail closed: refresh-token rotation and payment idempotency reject rather than guess.
 
 > **Bootstrapping the first admin:** two mechanisms exist.
 > 1. **V14 dev seed** — after Flyway runs, register `root-admin@nexuscommerce.test` via `POST /api/v1/users`; the migration already promoted that email's row to `ADMIN` (a no-op if the account doesn't exist yet, so re-run it once you've registered, or use step 2).
@@ -268,11 +301,12 @@ The **Access** column below shows the minimum role required.
 
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
+| `GET` | `/tree` | Public | The whole category hierarchy as nested nodes — one call builds the storefront nav. |
 | `GET` | `/` | Public | List categories (paged). |
 | `GET` | `/{id}` | Public | Get category by id. |
-| `POST` | `/` | **ADMIN** | Create category (`CreateCategoryRequestDto`: `name`). |
+| `POST` | `/` | **ADMIN** | Create category (`name`, optional `parentId`). |
 | `PUT` | `/{id}` | **ADMIN** | Update category. |
-| `DELETE` | `/{id}` | **ADMIN** | Delete category (rejected if it still has live products). |
+| `DELETE` | `/{id}` | **ADMIN** | Delete category — rejected if it still has live products **or** subcategories. |
 
 ### Products — `/api/v1/products`
 
@@ -281,11 +315,25 @@ The **Access** column below shows the minimum role required.
 | `GET` | `/` | Public | List products (paged summary DTOs). |
 | `GET` | `/{id}` | Public | Get product by id. |
 | `GET` | `/{id}/details` | Public | Get product with related category/details. |
-| `GET` | `/search?categoryName=…` | Public | Find products by category name (paged). |
+| `GET` | `/search` | Public | Faceted search (`gender`, `categorySlug`, `minPrice`, `maxPrice`, `sizes`, `colors`, `sort`, `page`, `size`). Unknown sort/facet values → **400**. |
+| `GET` | `/by-category/{categoryName}` | Public | Products whose category name matches, case-insensitively (paged). |
+| `GET` | `/slug/{slug}` | Public | Product by URL slug — the product-detail page. |
+| `GET` | `/facets/sizes` · `/facets/colors` | Public | The filter vocabulary: sizes and colours actually sold. |
 | `GET` | `/uniqueCategories` | Public | List unique category names present on products. |
-| `POST` | `/` | **ADMIN** | Create product (`CreateProductRequestDto`: `title`, `description`, `price`, `image`, `categoryId`, `rating`, optional `stock`). |
+| `POST` | `/` | **ADMIN** | Create product (`title`, `description`, `price`, `image`, `categoryId`, `rating`, optional `stock`). |
 | `PUT` | `/{id}` | **ADMIN** | Update product (partial merge — only non-null fields change). |
-| `DELETE` | `/{id}` | **ADMIN** | Soft-delete product. |
+| `DELETE` | `/{id}` | **ADMIN** | Soft-delete product — and with it its variants, images, live cart lines and wishlist items, so no reader is left pointing at a style that no longer exists. |
+
+### Variants — `/api/v1/products/...`
+
+A product is the style; a **variant** is one size + colour and is the unit of stock.
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| `GET` | `/products/{id}/variants` | Public | Every live variant with `sku`, `size`, `colorName`, `colorHex`, `priceDelta`, `stock`. |
+| `POST` | `/products/{productId}/variants` | **ADMIN** | Add a variant (`CreateVariantRequestDto`). |
+| `PUT` | `/products/variants/{variantId}` | **ADMIN** | Update any variant field, including `stock` — partial merge. |
+| `DELETE` | `/products/variants/{variantId}` | **ADMIN** | Soft-delete a variant, and retire any live cart line that held that size+colour. Refused if it is the product's last variant. |
 
 ### Cart — `/api/v1/cart`
 
@@ -293,12 +341,47 @@ All endpoints require a valid bearer token and are scoped to the caller.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Fetch (or lazily create) the caller's cart. Response includes `grandTotal`, `itemCount`, and every `CartItemResponseDto` (`productName`, `productImage`, `unitPrice`, `quantity`, `lineTotal`). |
-| `POST` | `/items` | Add a product (`AddToCartRequestDto`: `productId`, `quantity` ≥ 1). If the product is already on a line, the quantity is summed. |
-| `PATCH` | `/items/{id}` | Replace a line's quantity (`UpdateCartItemRequestDto`: `quantity` ≥ 1). Owner-only. |
+| `GET` | `/` | Fetch (or lazily create) the caller's cart. Response includes `grandTotal`, `itemCount`, and every `CartItemResponseDto` (`productName`, `productImage`, `unitPrice`, `quantity`, `lineTotal`, `variantId`, `variantSize`, `variantColorName`). |
+| `POST` | `/items` | Add a line (`AddToCartRequestDto`: `productId`, `quantity` ≥ 1, optional `variantId`). Lines are keyed on `(product, variant)`, so the same tee in two sizes is two lines. Adding an existing line sums the quantity — and re-checks stock. |
+| `PATCH` | `/items/{id}` | Replace a line's quantity (`UpdateCartItemRequestDto`: `quantity` ≥ 1). Owner-only; raising a quantity past available stock is rejected. |
 | `DELETE` | `/items/{id}` | Remove a single line. Owner-only. |
 | `DELETE` | `/` | Empty the cart (keeps the cart row, clears items). |
-| `POST` | `/checkout` | Convert the cart into an order via the same atomic stock reservation + snapshot pipeline; **optional** `CreateOrderRequestDto` body to override the lines; **optional `Idempotency-Key`** header (scope `"cart-checkout"`). Returns `201` with the created order. |
+| `POST` | `/checkout` | Convert the cart into an order via the same atomic variant-stock reservation + snapshot pipeline; **optional** `CreateOrderRequestDto` body to override the lines; **optional `Idempotency-Key`** header (scope `"cart-checkout"`). Returns `201` with the created order. |
+
+> **Which variant did you mean?** Cart lines, order lines and wishlist items accept a `variantId`. If a product has exactly one live variant it is implied; if several exist and none is named, the request is rejected with **400** — guessing a size is how wrong garments get shipped.
+
+### Wishlists — `/api/v1/wishlist`
+
+Owner-scoped; `GET /wishlist` returns the caller's default list with its items.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/lists` | Every list the caller owns, with `itemCount`. |
+| `POST` | `/` | Create a named list (`CreateWishlistRequestDto`: `name`). |
+| `DELETE` | `/{id}` | Delete a list and its items. |
+| `POST` | `/items` | Save to the default list (`AddToWishlistRequestDto`: `productId`, optional `variantId`). Re-saving restates the item instead of duplicating it. |
+| `DELETE` | `/items/{productId}` | Remove from the default list. |
+| `POST` | `/{id}/items` | Save to a specific list. |
+| `DELETE` | `/{id}/items/{productId}` | Remove from a specific list. |
+
+### Addresses — `/api/v1/addresses`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | The caller's addresses, default-first. |
+| `POST` | `/` | Save (`SaveAddressRequestDto`: `recipientName`, `phone`, `line1`, optional `line2`, `city`, `state`, `pincode`, `country`, `label`, `defaultShipping`, `defaultBilling`). The **first** address becomes both defaults. |
+| `PUT` | `/{id}` | Edit an address. |
+| `DELETE` | `/{id}` | Delete one; if it held a default, the oldest remaining address is promoted so checkout never loses its pick. |
+| `PUT` | `/{id}/default?shipping=true&billing=false` | Make it the shipping and/or billing default — exactly one default per kind per user. |
+
+### Payments — `/api/v1/payments`
+
+| Method | Path | Access | Description |
+|--------|------|--------|-------------|
+| `POST` | `/razorpay/orders/{orderId}` | Owner | Create (or reuse) the Razorpay intent for the order → `keyId`, `razorpayOrderId`, `amount` in **paise**, `currency`, `totalPrice`. **400** if the order is already paid or prices below the gateway's ₹1 floor. |
+| `POST` | `/razorpay/orders/{orderId}/verify` | Owner | Verify `razorpayPaymentId` + `razorpaySignature` against the **stored** intent, then settle. Replaying it returns the same `PAID` status and never mails twice. |
+| `GET` | `/orders/{orderId}/status` | Owner | Payment + gateway references for the order. |
+| `POST` | `/razorpay/webhook` | **Public** (HMAC-authenticated) | Razorpay posts here. The body is read as raw bytes and HMAC-verified with `RAZORPAY_WEBHOOK_SECRET`; a mismatch → **400**. Unknown intents still return **2xx** so the gateway stops retrying. |
 
 ### Orders — `/api/v1/orders`
 
@@ -361,12 +444,13 @@ All endpoints below require `ROLE_ADMIN`.
 |--------|------|
 | `401` | Protected route called without a valid, un-revoked token, or a consumed/invalid refresh token. |
 | `403` | Valid token, but wrong role or not the resource owner. |
-| `400` | Invalid request (validation / business-rule violations) **or** missing required query parameter **or** concurrent idempotency-key collision. |
+| `400` | Invalid request (validation / business-rule violations) **or** missing required query parameter **or** concurrent idempotency-key collision **or** an ambiguous/absent `variantId` **or** a payment refused by the rules (already paid, under the gateway floor, bad signature). |
 | `404` | Resource not found (e.g. missing id). |
 | `405` | Wrong HTTP method for a matched path. |
 | `409` | Duplicate resource (e.g. duplicate review for same order + product). |
 | `429` | Login rate limit exceeded (default 10/60 s per IP). |
 | `500` | Unhandled exceptions (generic handler). |
+| `502` | The Razorpay call itself failed, or the gateway isn't configured on this server. A provider problem is never reported as a shopper's bad request — and never as a success. |
 
 Create/update endpoints may return **`201 Created`** or **`204 No Content`** where implemented in controllers.
 
@@ -377,11 +461,13 @@ Create/update endpoints may return **`201 Created`** or **`204 No Content`** whe
 Several guarantees are worth knowing before you touch the domain:
 
 - **Soft delete everywhere** — Every entity uses `@SQLDelete` + `@SQLRestriction(deleted_datetime IS NULL)`. A "delete" is an UPDATE that stamps `deleted_datetime`; restricted reads then hide the row without losing it.
-- **Optimistic locking on orders** — `Order` carries a `@Version` field (added in `V8`), so concurrent updates to the same order collide predictably instead of silently overwriting. Its soft-delete SQL is version-guarded too.
-- **Oversell-safe stock** — Placing/adjusting an order decrements stock with an atomic conditional bulk UPDATE (`WHERE stock >= qty`); zero affected rows means insufficient stock and the whole transaction rolls back. Returning stock on delete/remove is likewise atomic.
-- **Historical line-item snapshots** — Order line items store `unit_price` (`V11`) plus `product_name` and `product_image` (`V12`). Editing a price, renaming a product, or soft-deleting it therefore **cannot** rewrite historical orders or revenue, and a deleted product's line item still renders.
-- **Uniqueness that survives soft-delete** — Flyway generated columns mirror the unique key only for live rows (`V8` unique names, `V10` one live review per `(order, product)`, `V13` one live cart per user and one live cart line per `(cart, product)`), so a deleted row frees the slot without a partial unique index.
-- **Migrations are the source of truth** — `spring.jpa.hibernate.ddl-auto: validate` means Hibernate only checks the schema; **Flyway** (`V1`–`V14` under `src/main/resources/db/migration`) owns it. Add a new `V__` file for any column change — never edit an applied migration.
+- **Optimistic locking on orders** — `Order` carries a `@Version` field (added in `V8`), so concurrent updates to the same order collide predictably instead of silently overwriting. Its soft-delete SQL is version-guarded too. Because a JPQL bulk UPDATE bypasses both `@Version` and `@SQLRestriction`, the conditional payment statements bump `version` by hand and spell out `deleted_at IS NULL`.
+- **Oversell-safe stock** — Placing/adjusting an order decrements **variant** stock with an atomic conditional bulk UPDATE (`WHERE stock >= qty`); zero affected rows means insufficient stock and the whole transaction rolls back. Returning stock on delete/remove is likewise atomic.
+- **Settling a payment is a conditional UPDATE, not a read-then-save** — `settleIfUnpaid()` matches `WHERE payment_status <> PAID`, so a client verify and Razorpay's webhook racing for one order produce exactly **one** winner, one write, and one confirmation mail. `markFailedIfNotPaid()` can never turn a settled order back into an unpaid one.
+- **Historical line-item snapshots** — Order line items store `unit_price` (`V11`) plus `product_name` and `product_image` (`V12`), and since `V20` the `variant_id`, size, colour name and hex they were bought in; `orders.address_snapshot` freezes the shipping address the same way. Editing a price, renaming a product, or re-sizing a variant therefore **cannot** rewrite historical orders or revenue, and a deleted product's line item still renders.
+- **Uniqueness that survives soft-delete** — Flyway generated columns mirror the unique key only for live rows (`V8` unique names, `V10` one live review per `(order, product)`, `V13` one live cart per user, `V22` one live cart line per `(cart, variant)`), so a deleted row frees the slot without a partial unique index.
+- **Retiring a style retires the live rows that point at it** — `DELETE /products/{id}` also retires that product's variants, images, **cart lines and wishlist items**; deleting a variant retires the cart lines for that size+colour. It has to: `CartRepository.findByUserId` fetch-joins `items.product` and `items.variant`, and a fetch-join onto a soft-deleted row raises `FetchNotFoundException` before any mapper can guard it, so a leftover line would turn `GET /cart` into a 500 for that shopper. Purchase history is deliberately *not* retired — a `Review` outlives the style it reviews and is mapped from read-only FK mirrors, so it stays readable when the product is gone.
+- **Migrations are the source of truth** — `spring.jpa.hibernate.ddl-auto: validate` means Hibernate only checks the schema; **Flyway** owns it. Add a new `V__` file for any column change — never edit an applied migration — and add its twin under `db/migration-postgres` in the same commit.
 - **Idempotency on writes** — `POST /orders` and `POST /cart/checkout` accept a client-generated `Idempotency-Key` UUID. The first response is stored in Redis under a **user-scoped** key with a 24 h TTL; retries replay the cached body. In-flight locks have a 10 min TTL and are safely re-acquirable after expiry (SETNX on the reacquisition path, not a plain SET), so a client crash cannot wedge a scope for 24 h.
 - **Revocation is Redis-backed** — Access tokens are self-verifying JWTs, so "logout" blacklists the current `jti` in Redis for the rest of its lifetime (`jwt:blacklist::<jti>`), and refresh tokens live only as opaque random 32-byte values keyed by `refresh::<token>` with rotation on every refresh.
 
@@ -397,6 +483,18 @@ Several guarantees are worth knowing before you touch the domain:
 | `V12` | `order_products.product_name` / `product_image` snapshot (backfilled). |
 | `V13` | `carts` + `cart_items` — persistent shopping cart, one live cart per user, live `(cart, product)` unique lines. |
 | `V14` | Dev seed: promote `root-admin@nexuscommerce.test` to `ADMIN` (rotate or delete before real deployments). |
+| `V15` | Category hierarchy: `parent_id`, `description`, `slug`, plus soft-delete-safe unique `live_slug` and unique name-within-parent. |
+| `V16` | `product_variants` — size × colour, per-variant stock and price delta, live-unique SKU and one variant per `(product, size, colour)`. |
+| `V17` | `product_images` — ordered gallery per product (live-unique position). |
+| `V18` | Product metadata: `brand`, `material`, `care_instructions`, `gender`, `compare_at_price`, `is_active`, `slug` + live-unique slug. |
+| `V19` | `wishlists` + `wishlist_items` — one live list per `(user, name)`, one live item per `(wishlist, product)`. |
+| `V20` | `addresses`; payment columns on `orders` (`address_snapshot`, `payment_provider`, `payment_ref`, `payment_status`); variant snapshot on `order_products`; `variant_id` on `cart_items`. |
+| `V21` | Seed the "Plain Thread" apparel catalogue (categories, products, size × colour variants). |
+| `V22` | Variant-scoped cart lines — `variant_id` becomes `NOT NULL` and live uniqueness moves from `(cart, product)` to `(cart, variant)`, so a shopper can hold a Medium and a Large of the same shirt. Unresolvable live lines are removed rather than left ambiguous. |
+| `V23` | Razorpay references on `orders`: `payment_intent_id` (what the signature check and the webhook lookup key on, indexed) and `paid_datetime`. |
+| `V24` | `orders.payment_amount_paise` — remembers what the stored intent was priced at, so a repeat `createPayment` can tell whether reusing it is still correct. |
+
+Every version above has a PostgreSQL twin in `src/main/resources/db/migration-postgres` (same filenames, dialect-correct DDL); the two sets are checked to be the same 24 files.
 
 > **MySQL 8.4 note on V7.** On a fresh MySQL 8.4 DB, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` causes the server to drop the FK-supporting index `fk_review_order` automatically. An unconditional `DROP INDEX fk_review_order` then fails with `1091 Can't DROP`. V7 wraps both drops in a stored procedure that checks `information_schema.STATISTICS` before issuing the DDL, so it applies cleanly on **fresh MySQL 8.4** databases and on **older dev databases** that pre-date the composite.
 
@@ -408,19 +506,20 @@ Several guarantees are worth knowing before you touch the domain:
 src/main/java/com/example/nexusCommerce/
   adapters/          # Entity ↔ DTO mapping
   configs/           # Security / WebMvc / cache / OpenAPI / auditing / password-encoder / async beans
-  controllers/       # REST endpoints (Auth, Cart, Category, Product, Order, Review, Admin, User)
+  controllers/       # REST endpoints (Auth, Cart, Category, Product, Variant, Wishlist, Address, Payment, Order, Review, Admin, User)
   dtos/              # Request/response payloads
   events/            # OrderPlacedEvent, OrderStatusChangedEvent, OrderEventListener (@Async AFTER_COMMIT)
-  exceptions/        # Custom exceptions + GlobalExceptionHandler
+  exceptions/        # Custom exceptions (incl. PaymentProviderException → 502) + GlobalExceptionHandler
   repositories/      # Spring Data JPA
-  schema/            # JPA entities (User, Category, Product, Order, OrderProducts, Review, Cart, CartItem) + Role/OrderStatus enums
+  schema/            # JPA entities (User, Category, Product, ProductVariant, ProductImage, Order, OrderProducts, Review, Cart, CartItem, Wishlist, WishlistItem, Address) + Role/OrderStatus/PaymentStatus enums
   security/          # JwtService, JwtAuthFilter, AuthenticatedUser, RefreshTokenService, TokenBlacklistService, IdempotencyService, LoginRateLimiterInterceptor
-  services/          # Business logic (interface + Impl) — includes CartService, ProductImageUploadService, NotificationService (+ LoggingNotificationService stub)
+  services/          # Business logic (interface + Impl) — includes CartService, VariantResolver, WishlistService, AddressService, PaymentService + RazorpayClient, ProductImageUploadService, NotificationService (+ LoggingNotificationService stub)
   utils/             # ApiResponse wrapper, PageResponse, Pagination (clampSize / of / canonicalSort)
 
 src/main/resources/
   application.yml
-  db/migration/      # Flyway SQL (V1–V14)
+  db/migration/           # Flyway SQL for MySQL (V1–V24)
+  db/migration-postgres/  # the same 24 versions in PostgreSQL DDL
 
 newrelic/            # New Relic Java agent config (JAR is gitignored)
 uploads/             # Runtime directory for product image uploads (gitignored)
