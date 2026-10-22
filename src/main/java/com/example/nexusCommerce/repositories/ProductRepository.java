@@ -45,6 +45,11 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
      * the total correct without DISTINCT. The {@code *Count} parameters exist because a list
      * cannot be compared to NULL in JPQL: zero means "no filter", and the list always holds
      * at least one element so no engine has to render an empty IN ().
+     *
+     * {@code keyword1..4} arrive already sanitised and wrapped as LIKE patterns
+     * (see {@link ProductSearchRequestDto#keywordTokens()}). They are ANDed, so a shopper
+     * typing "organic crew tee" finds "Organic Cotton Crew Tee"; a single contiguous LIKE
+     * would answer that reasonable query with an empty page.
      */
     @Query(value = """
             SELECT p FROM Product p
@@ -53,6 +58,18 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
             WHERE p.isActive = TRUE
               AND (:gender IS NULL OR LOWER(p.gender) = :gender)
               AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:keyword1 IS NULL OR LOWER(p.title) LIKE :keyword1 OR LOWER(p.brand) LIKE :keyword1
+                   OR LOWER(p.description) LIKE :keyword1 OR LOWER(p.material) LIKE :keyword1
+                   OR LOWER(c.name) LIKE :keyword1)
+              AND (:keyword2 IS NULL OR LOWER(p.title) LIKE :keyword2 OR LOWER(p.brand) LIKE :keyword2
+                   OR LOWER(p.description) LIKE :keyword2 OR LOWER(p.material) LIKE :keyword2
+                   OR LOWER(c.name) LIKE :keyword2)
+              AND (:keyword3 IS NULL OR LOWER(p.title) LIKE :keyword3 OR LOWER(p.brand) LIKE :keyword3
+                   OR LOWER(p.description) LIKE :keyword3 OR LOWER(p.material) LIKE :keyword3
+                   OR LOWER(c.name) LIKE :keyword3)
+              AND (:keyword4 IS NULL OR LOWER(p.title) LIKE :keyword4 OR LOWER(p.brand) LIKE :keyword4
+                   OR LOWER(p.description) LIKE :keyword4 OR LOWER(p.material) LIKE :keyword4
+                   OR LOWER(c.name) LIKE :keyword4)
               AND (:minPrice IS NULL OR p.price >= :minPrice)
               AND (:maxPrice IS NULL OR p.price <= :maxPrice)
               AND (:sizeCount = 0 OR EXISTS (
@@ -67,6 +84,18 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
             WHERE p.isActive = TRUE
               AND (:gender IS NULL OR LOWER(p.gender) = :gender)
               AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:keyword1 IS NULL OR LOWER(p.title) LIKE :keyword1 OR LOWER(p.brand) LIKE :keyword1
+                   OR LOWER(p.description) LIKE :keyword1 OR LOWER(p.material) LIKE :keyword1
+                   OR LOWER(c.name) LIKE :keyword1)
+              AND (:keyword2 IS NULL OR LOWER(p.title) LIKE :keyword2 OR LOWER(p.brand) LIKE :keyword2
+                   OR LOWER(p.description) LIKE :keyword2 OR LOWER(p.material) LIKE :keyword2
+                   OR LOWER(c.name) LIKE :keyword2)
+              AND (:keyword3 IS NULL OR LOWER(p.title) LIKE :keyword3 OR LOWER(p.brand) LIKE :keyword3
+                   OR LOWER(p.description) LIKE :keyword3 OR LOWER(p.material) LIKE :keyword3
+                   OR LOWER(c.name) LIKE :keyword3)
+              AND (:keyword4 IS NULL OR LOWER(p.title) LIKE :keyword4 OR LOWER(p.brand) LIKE :keyword4
+                   OR LOWER(p.description) LIKE :keyword4 OR LOWER(p.material) LIKE :keyword4
+                   OR LOWER(c.name) LIKE :keyword4)
               AND (:minPrice IS NULL OR p.price >= :minPrice)
               AND (:maxPrice IS NULL OR p.price <= :maxPrice)
               AND (:sizeCount = 0 OR EXISTS (
@@ -76,6 +105,10 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
             """)
     Page<Product> search(@Param("gender") String gender,
                          @Param("categorySlug") String categorySlug,
+                         @Param("keyword1") String keyword1,
+                         @Param("keyword2") String keyword2,
+                         @Param("keyword3") String keyword3,
+                         @Param("keyword4") String keyword4,
                          @Param("minPrice") BigDecimal minPrice,
                          @Param("maxPrice") BigDecimal maxPrice,
                          @Param("sizes") List<String> sizes,

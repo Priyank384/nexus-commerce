@@ -139,12 +139,18 @@ public class ProductServiceImpl implements ProductService {
 
         List<String> sizes = query.normalizedSizes();
         List<String> colors = query.normalizedColors();
+        // Always exactly MAX_KEYWORD_TOKENS long, padded with nulls.
+        List<String> keywords = query.keywordTokens();
 
         // An empty list would render "IN ()"; the count parameter is the real switch and the
         // list always keeps at least one never-matching element.
         Page<Product> products = productRepository.search(
                 query.normalizedGender(),
                 query.normalizedCategorySlug(),
+                keywords.get(0),
+                keywords.get(1),
+                keywords.get(2),
+                keywords.get(3),
                 query.getMinPrice(),
                 query.getMaxPrice(),
                 sizes.isEmpty() ? List.of("") : sizes,

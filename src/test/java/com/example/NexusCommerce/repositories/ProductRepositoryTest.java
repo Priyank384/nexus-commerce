@@ -18,6 +18,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Pageable;
 
 import com.example.nexusCommerce.configs.JpaAuditingConfig;
+import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
@@ -149,6 +150,90 @@ public class ProductRepositoryTest {
 
         assertEquals(List.of("M"), productRepository.findUniqueVariantSizes());
         assertEquals(List.of("Bone"), productRepository.findUniqueVariantColors());
+    }
+
+    @Test
+    void search_whenKeywordMatchesTitle_returnsOnlyThatProduct() {
+        assertEquals(List.of("Laptop"), titles(search("lap")));
+    }
+
+    @Test
+    void search_whenKeywordMatchesDescriptionOrCategory_findsTheProductAnyway() {
+        persistBook();
+
+        // "paperback" appears only in the description, "electronics" only in the category name.
+        assertEquals(List.of("Novel"), titles(search("paperback")));
+        assertEquals(List.of("Laptop", "Phone"), titles(search("electronics")));
+    }
+
+    @Test
+    void search_ANDsTheWordsRatherThanMatchingThePhrase() {
+        // "laptop a" is not a contiguous substring of anything, but both words are present,
+        // so a phrase LIKE would answer this reasonable query with an empty page.
+        assertEquals(List.of("Laptop"), titles(search("laptop a")));
+    }
+
+    @Test
+    void search_whenKeywordIsAbsent_returnsEveryActiveProduct() {
+        assertEquals(2, search(null).size());
+    }
+
+    @Test
+    void search_whenNothingMatches_returnsEmptyPage() {
+        assertTrue(search("tablet").isEmpty());
+    }
+
+    @Test
+    void search_neverReturnsUnpublishedProducts() {
+        laptop.setIsActive(false);
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        assertEquals(List.of("Phone"), titles(search("phone")));
+    }
+
+    @Test
+    void search_combinesKeywordWithPriceRange() {
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setKeyword("a");
+        query.setMinPrice(BigDecimal.valueOf(1200));
+        List<String> result = run(query).stream().map(Product::getTitle).toList();
+
+        // Both titles/descriptions contain "a", but only Laptop clears the floor.
+        assertEquals(List.of("Laptop"), result);
+    }
+
+    /** Goes through the DTO so the test exercises the same normalisation the HTTP path does. */
+    private List<Product> search(String keyword) {
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setKeyword(keyword);
+        return run(query);
+    }
+
+    private List<Product> run(ProductSearchRequestDto query) {
+        List<String> keywords = query.keywordTokens();
+        List<String> sizes = query.normalizedSizes();
+        List<String> colors = query.normalizedColors();
+        return productRepository.search(query.normalizedGender(), query.normalizedCategorySlug(),
+                keywords.get(0), keywords.get(1), keywords.get(2), keywords.get(3),
+                query.getMinPrice(), query.getMaxPrice(),
+                sizes.isEmpty() ? List.of("") : sizes, sizes.size(),
+                colors.isEmpty() ? List.of("") : colors, colors.size(),
+                Pageable.unpaged()).getContent();
+    }
+
+    private Product persistBook() {
+        return testEntityManager.persistAndFlush(Product.builder()
+                .title("Novel")
+                .description("A paperback")
+                .price(BigDecimal.valueOf(19.99).setScale(2, RoundingMode.HALF_UP))
+                .rating(BigDecimal.valueOf(4.2))
+                .category(booksCategory)
+                .build());
+    }
+
+    private List<String> titles(List<Product> products) {
+        return products.stream().map(Product::getTitle).sorted().toList();
     }
 
     private Product persistProduct(String title, Category category) {

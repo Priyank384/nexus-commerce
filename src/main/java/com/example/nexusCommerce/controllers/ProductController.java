@@ -96,12 +96,15 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success(null, "Product deleted successfully!"));
     }
 
-    @Operation(summary="Browse the catalogue by facets",
-               description="The storefront listing and collection pages. Filter by gender, category slug (a "
-                           + "parent slug matches its whole subtree), price range, sizes and colours; sort by "
-                           + "id, price, rating, createdAt or title. Unknown facet values are rejected rather "
-                           + "than answered with an empty page, which also keeps arbitrary strings from minting "
-                           + "cache entries. Public; cached per facet combination."
+    @Operation(summary="Browse the catalogue by keyword and facets",
+               description="The storefront listing, collection and search pages. Filter by keyword (every word "
+                           + "must appear in the title, brand, description, material or category name), gender, "
+                           + "category slug (a parent slug matches its whole subtree), price range, sizes and "
+                           + "colours; sort by id, price, rating, createdAt or title. Unknown gender, category, "
+                           + "size or colour values are rejected rather than answered with an empty page. The "
+                           + "keyword is lowercased, whitespace-folded, stripped of LIKE metacharacters and "
+                           + "clamped to 64 characters before it becomes a cache key. Public; cached per query "
+                           + "combination."
     )
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> search(
