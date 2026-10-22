@@ -15,8 +15,8 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
 @Setter
@@ -25,17 +25,17 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name="order_products")
+@Table(name = "order_products")
 @SQLDelete(sql = "UPDATE order_products SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
 @SQLRestriction("deleted_datetime is NULL")
-public class OrderProducts extends BaseEntity{
-    
-    @ManyToOne(fetch=FetchType.LAZY)
-    @JoinColumn(name="order_id", nullable=false)
+public class OrderProducts extends BaseEntity {
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    @ManyToOne(fetch=FetchType.LAZY)
-    @JoinColumn(name="product_id", nullable=false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
     // Read-only view of the FK so the line item can be rendered even when the product row
@@ -43,7 +43,14 @@ public class OrderProducts extends BaseEntity{
     @Column(name = "product_id", insertable = false, updatable = false, nullable = false)
     private Long productId;
 
-    @Column(nullable=false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private ProductVariant variant;
+
+    @Column(name = "variant_id", insertable = false, updatable = false)
+    private Long variantId;
+
+    @Column(nullable = false)
     private Integer quantity;
 
     // Price paid at the moment the line was reserved. Revenue and past order totals must not
@@ -58,4 +65,15 @@ public class OrderProducts extends BaseEntity{
 
     @Column(name = "product_image")
     private String productImage;
+
+    // V20: variant identity captured at sale. Same "immutable after purchase" philosophy as
+    // productName/unitPrice above. Historic pre-V20 rows backfill to ONE / Default.
+    @Column(name = "variant_size", length = 20)
+    private String variantSize;
+
+    @Column(name = "variant_color_name", length = 60)
+    private String variantColorName;
+
+    @Column(name = "variant_color_hex", length = 9)
+    private String variantColorHex;
 }

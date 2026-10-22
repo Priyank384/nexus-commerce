@@ -2,6 +2,7 @@ package com.example.nexusCommerce.repositories;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,10 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
     boolean existsByTitleIgnoreCase(String name);
 
     boolean existsByCategory_Id(Long categoryId);
+
+    Optional<Product> findBySlug(String slug);
+
+    boolean existsBySlug(String slug);
 
     @Query(value = "SELECT DISTINCT c.name FROM products p "
             + "JOIN categories c ON p.category_id = c.id "

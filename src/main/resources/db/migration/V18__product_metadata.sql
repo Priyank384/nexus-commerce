@@ -1,0 +1,31 @@
+-- Apparel product metadata: brand, material, care, gender targeting, compare-at price,
+-- URL slug, and an explicit isActive flag so admin can hide a product without soft-deleting
+-- its order history or reviews. Legacy rows are backfilled to safe defaults.
+
+ALTER TABLE products
+    ADD COLUMN brand VARCHAR(120) NULL AFTER category_id,
+    ADD COLUMN material VARCHAR(255) NULL AFTER brand,
+    ADD COLUMN care_instructions VARCHAR(500) NULL AFTER material,
+    ADD COLUMN gender VARCHAR(10) NULL AFTER care_instructions,
+    ADD COLUMN compare_at_price DECIMAL(38, 2) NULL AFTER price,
+    ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE AFTER compare_at_price,
+    ADD COLUMN slug VARCHAR(120) NULL AFTER is_active;
+
+CREATE INDEX idx_products_brand ON products (brand);
+CREATE INDEX idx_products_gender ON products (gender);
+CREATE INDEX idx_products_is_active ON products (is_active);
+
+-- Backfill slugs from titles. The id suffix guarantees no collision against V8's
+-- active_title uniqueness even if two products share a title.
+UPDATE products
+SET slug = CONCAT(
+    LOWER(REGEXP_REPLACE(title, '[^a-zA-Z0-9]+', '-')),
+    '-', id
+)
+WHERE slug IS NULL;
+
+ALTER TABLE products
+    ADD COLUMN live_slug VARCHAR(120) GENERATED ALWAYS AS
+        (IF(deleted_datetime IS NULL, slug, NULL)) STORED,
+    ADD UNIQUE KEY uk_products_live_slug (live_slug),
+    ADD INDEX idx_products_slug (slug);

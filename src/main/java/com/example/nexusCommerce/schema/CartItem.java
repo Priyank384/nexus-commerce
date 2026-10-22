@@ -17,7 +17,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "cart_items")
-@SQLDelete(sql = "UPDATE cart_items SET deleted_datetime = NOW(6) WHERE id = ?")
+@SQLDelete(sql = "UPDATE cart_items SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
 @SQLRestriction("deleted_datetime is NULL")
 @Getter
 @Setter
@@ -38,6 +38,18 @@ public class CartItem extends BaseEntity {
     // triggering a lazy load on Product.
     @Column(name = "product_id", insertable = false, updatable = false, nullable = false)
     private Long productId;
+
+    /**
+     * Variant the shopper picked. Nullable through Phase 2a: V20 backfills historic rows
+     * to the synthetic ONE / Default variant, and the DB-level NOT NULL + (cart, variant)
+     * uniqueness flip ships with Phase 4's variant-aware CartService.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private ProductVariant variant;
+
+    @Column(name = "variant_id", insertable = false, updatable = false)
+    private Long variantId;
 
     @Column(nullable = false)
     private Integer quantity;

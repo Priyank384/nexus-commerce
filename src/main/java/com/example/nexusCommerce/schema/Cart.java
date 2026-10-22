@@ -21,7 +21,7 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "carts")
-@SQLDelete(sql = "UPDATE carts SET deleted_datetime = NOW(6) WHERE id = ?")
+@SQLDelete(sql = "UPDATE carts SET deleted_datetime = CURRENT_TIMESTAMP WHERE id = ?")
 @SQLRestriction("deleted_datetime is NULL")
 @Getter
 @Setter
