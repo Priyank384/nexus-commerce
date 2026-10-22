@@ -100,6 +100,14 @@ app:
     login:
       max: ${LOGIN_RATE_MAX:10}
       window-seconds: ${LOGIN_RATE_WINDOW_SECONDS:60}
+  admin:
+    bootstrap:
+      # Dev/test only. Empty by default, which makes AdminBootstrap inert. Setting both creates
+      # (or promotes) that email to ROLE_ADMIN with this password on every boot so the admin
+      # surface can be exercised. Never populate these in a real deployment.
+      email: ${ADMIN_BOOTSTRAP_EMAIL:}
+      password: ${ADMIN_BOOTSTRAP_PASSWORD:}
+      name: ${ADMIN_BOOTSTRAP_NAME:Platform Admin}
 
 razorpay:
   # Empty defaults keep the app bootable (and the test suite green) without credentials; the
