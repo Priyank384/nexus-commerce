@@ -34,12 +34,14 @@ public interface  OrderProductsRepository extends JpaRepository<OrderProducts, L
     BigDecimal totalRevenue();
 
     /**
-     * Returns (productId, quantity) pairs as scalars. Used to hand stock back when an order
-     * is deleted without loading the OrderProducts entities into the persistence context --
-     * managed line items left referencing a soft-deleted Order make the commit flush fail
-     * with a TransientPropertyValueException.
+     * Returns (variantId, productId, quantity) triples as scalars. Used to hand stock back
+     * when an order is deleted without loading the OrderProducts entities into the persistence
+     * context -- managed line items left referencing a soft-deleted Order make the commit
+     * flush fail with a TransientPropertyValueException. variant_id is null only on pre-V20
+     * rows, and productId is carried alongside so those legacy lines can still be refunded to
+     * the product-level counter.
      */
-    @Query("SELECT op.product.id, op.quantity FROM OrderProducts op WHERE op.order.id = :orderId")
+    @Query("SELECT op.variant.id, op.product.id, op.quantity FROM OrderProducts op WHERE op.order.id = :orderId")
     List<Object[]> findStockDeltasByOrderId(@Param("orderId") Long orderId);
 
     /**

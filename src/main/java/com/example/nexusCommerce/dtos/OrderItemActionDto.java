@@ -25,4 +25,11 @@ public class OrderItemActionDto {
 
     @NotNull(message = "action must not be null")
     private OrderItemAction action;
+
+    /**
+     * Identifies which size+colour line to act on. Omitting it only resolves for products
+     * that carry a single variant, which is what V16 backfilled for pre-apparel rows.
+     */
+    @Positive(message = "variantId must be positive")
+    private Long variantId;
 }

@@ -40,15 +40,15 @@ public class CartItem extends BaseEntity {
     private Long productId;
 
     /**
-     * Variant the shopper picked. Nullable through Phase 2a: V20 backfills historic rows
-     * to the synthetic ONE / Default variant, and the DB-level NOT NULL + (cart, variant)
-     * uniqueness flip ships with Phase 4's variant-aware CartService.
+     * The size+colour the shopper picked. NOT NULL since V22, which also moved live
+     * uniqueness from (cart, product) to (cart, variant) so a cart can hold a Medium and a
+     * Large of the same shirt. CartService resolves one on every add.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "variant_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "variant_id", nullable = false)
     private ProductVariant variant;
 
-    @Column(name = "variant_id", insertable = false, updatable = false)
+    @Column(name = "variant_id", insertable = false, updatable = false, nullable = false)
     private Long variantId;
 
     @Column(nullable = false)

@@ -10,8 +10,10 @@ import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_DETAILS;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -35,11 +37,13 @@ import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
+import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
@@ -54,7 +58,9 @@ public class OrderServiceImpl implements OrderService {
     private final OrderProductsRepository orderProductsRepository;
     private final OrderAdapter orderAdapter;
     private final ProductRepository productRepository;
+    private final ProductVariantRepository variantRepository;
     private final UserRepository userRepository;
+    private final VariantResolver variantResolver;
     private final org.springframework.context.ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
@@ -115,9 +121,11 @@ public class OrderServiceImpl implements OrderService {
         // Scalar projection instead of managed line items: an OrderProducts still in the
         // persistence context when the Order is soft-deleted makes the commit cascade
         // validation see the removed Order as transient and throw.
+        Set<Long> touchedProducts = new HashSet<>();
         for (Object[] row : orderProductsRepository.findStockDeltasByOrderId(id)) {
-            returnStock((Long) row[0], (Integer) row[1]);
+            returnStock((Long) row[0], (Long) row[1], (Integer) row[2], touchedProducts);
         }
+        resyncProductStock(touchedProducts);
         orderProductsRepository.softDeleteByOrderId(id);
         orderRepository.delete(order);
     }
@@ -153,26 +161,35 @@ public class OrderServiceImpl implements OrderService {
                     .collect(Collectors.toMap(Product::getId, Function.identity()));
 
             List<OrderProducts> orderProducts = new ArrayList<>();
+            Set<Long> touchedProducts = new HashSet<>();
             for (OrderItemRequestDto itemDto : createOrderRequestDto.getOrderItems()) {
                 Product product = productMap.get(itemDto.getProductId());
                 if (product == null) {
                     throw new ResourceNotFoundException("Product not found with id: " + itemDto.getProductId());
                 }
+                ProductVariant variant = variantResolver.resolve(product, itemDto.getVariantId());
                 int qty = resolveQuantity(itemDto.getQuantity());
-                // Atomic conditional decrement: 0 affected rows means the stock was
-                // insufficient, and the surrounding transaction rolls back every other
-                // line's decrement too, so a partial oversell can never be committed.
-                decrementOrThrow(product, qty);
+                // Atomic conditional decrement on the variant, which is the unit that is
+                // actually picked off a shelf: 0 affected rows means that size+colour ran out
+                // and the surrounding transaction rolls back every other line too, so a
+                // partial oversell can never be committed.
+                decrementOrThrow(product, variant, qty);
+                touchedProducts.add(product.getId());
                 orderProducts.add(OrderProducts.builder()
                         .order(order)
                         .product(product)
+                        .variant(variant)
                         .quantity(qty)
-                        .unitPrice(product.getPrice())
+                        .unitPrice(variantResolver.unitPrice(product, variant))
                         .productName(product.getTitle())
-                        .productImage(product.getImage())
+                        .productImage(variant.getImageUrl() != null ? variant.getImageUrl() : product.getImage())
+                        .variantSize(variant.getSize())
+                        .variantColorName(variant.getColorName())
+                        .variantColorHex(variant.getColorHex())
                         .build());
             }
             savedItems = orderProductsRepository.saveAll(orderProducts);
+            resyncProductStock(touchedProducts);
         }
 
         // The line items are already in the persistence context with products resolved,
@@ -197,7 +214,7 @@ public class OrderServiceImpl implements OrderService {
             order.setStatus(updateOrderRequestDto.getStatus());
             orderRepository.save(order);
         }
-        Map<Long, OrderProducts> existingItems = null;
+        Map<String, OrderProducts> existingItems = null;
         if(updateOrderRequestDto.getOrderItems()!= null){
             List<Long> productIds = updateOrderRequestDto.getOrderItems().stream()
                                                             .map(OrderItemActionDto::getProductId)
@@ -215,61 +232,78 @@ public class OrderServiceImpl implements OrderService {
 
             List<OrderProducts> toSave = new ArrayList<>();
             List<OrderProducts> toDelete = new ArrayList<>();
+            Set<Long> touchedProducts = new HashSet<>();
 
+            // Keyed by (product, variant): since V22 a shirt in Medium and a shirt in Large
+            // are two separate lines of the same order, so a product-keyed map would merge
+            // them and let an edit silently drop one of the sizes.
             existingItems = orderProductsRepository.findByOrderWithProduct(order).stream()
-                                                        .collect(Collectors.toMap(OrderProducts::getProductId, Function.identity()));
+                    .collect(Collectors.toMap(OrderServiceImpl::lineKey, Function.identity()));
 
-            for(OrderItemActionDto itemAction : updateOrderRequestDto.getOrderItems()){
+            for (OrderItemActionDto itemAction : updateOrderRequestDto.getOrderItems()) {
                 Product product = productMap.get(itemAction.getProductId());
                 Long productId = product.getId();
-                OrderProducts existing = existingItems.get(productId);
+                ProductVariant variant = variantResolver.resolve(product, itemAction.getVariantId());
+                String key = lineKey(productId, variant.getId());
+                OrderProducts existing = existingItems.get(key);
 
                 switch(itemAction.getAction()){
                     case ADD -> {
                         int addQty = resolveQuantity(itemAction.getQuantity());
                         if(existing != null){
-                            decrementOrThrow(product, addQty);
+                            decrementOrThrow(product, variant, addQty);
+                            touchedProducts.add(productId);
                             existing.setQuantity(existing.getQuantity() + addQty);
                             toSave.add(existing);
                         }
                         else{
-                            decrementOrThrow(product, addQty);
+                            decrementOrThrow(product, variant, addQty);
+                            touchedProducts.add(productId);
                             OrderProducts newItem = OrderProducts.builder()
                                                         .order(order)
                                                         .product(product)
+                                                        .variant(variant)
                                                         .quantity(addQty)
-                                                        .unitPrice(product.getPrice())
+                                                        .unitPrice(variantResolver.unitPrice(product, variant))
                                                         .productName(product.getTitle())
-                                                        .productImage(product.getImage())
+                                                        .productImage(variant.getImageUrl() != null
+                                                                ? variant.getImageUrl() : product.getImage())
+                                                        .variantSize(variant.getSize())
+                                                        .variantColorName(variant.getColorName())
+                                                        .variantColorHex(variant.getColorHex())
                                                         .build();
-                            existingItems.put(productId, newItem);
+                            existingItems.put(key, newItem);
                             toSave.add(newItem);
                         }
                     }
                     case REMOVE ->{
                         if(existing == null){
-                            throw new ResourceNotFoundException("Product not found with id: " + productId);
+                            throw new ResourceNotFoundException("Order line not found for product "
+                                    + productId + " variant " + variant.getId());
                         }
-                        returnStock(productId, existing.getQuantity());
+                        returnStock(variant.getId(), productId, existing.getQuantity(), touchedProducts);
                         toDelete.add(existing);
-                        existingItems.remove(productId);
+                        existingItems.remove(key);
                     }
                     case INCREMENT ->{
                         if(existing == null){
-                            throw new ResourceNotFoundException("Product not found with id: " + productId);
+                            throw new ResourceNotFoundException("Order line not found for product "
+                                    + productId + " variant " + variant.getId());
                         }
-                        decrementOrThrow(product, 1);
+                        decrementOrThrow(product, variant, 1);
+                        touchedProducts.add(productId);
                         existing.setQuantity(existing.getQuantity() + 1);
                         toSave.add(existing);
                     }
                     case DECREMENT -> {
                         if(existing == null){
-                            throw new ResourceNotFoundException("Product not found with id: " + productId);
+                            throw new ResourceNotFoundException("Order line not found for product "
+                                    + productId + " variant " + variant.getId());
                         }
-                        returnStock(productId, 1);
+                        returnStock(variant.getId(), productId, 1, touchedProducts);
                         if(existing.getQuantity() <= 1){
                             toDelete.add(existing);
-                            existingItems.remove(productId);
+                            existingItems.remove(key);
                         }
                         else{
                             existing.setQuantity(existing.getQuantity() - 1);
@@ -285,6 +319,7 @@ public class OrderServiceImpl implements OrderService {
             if(!toDelete.isEmpty()){
                 orderProductsRepository.deleteAll(toDelete);
             }
+            resyncProductStock(touchedProducts);
         }
 
         // existingItems already reflects the post-mutation state with products resolved,
@@ -323,22 +358,51 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    private void decrementOrThrow(Product product, int qty) {
-        if (productRepository.decrementStock(product.getId(), qty) == 0) {
+    private void decrementOrThrow(Product product, ProductVariant variant, int qty) {
+        if (variantRepository.decrementStock(variant.getId(), qty) == 0) {
             throw new InvalidRequestException(
-                    "Insufficient stock for product " + product.getId() + " (" + product.getTitle()
-                            + "): requested " + qty + " but not enough available");
+                    "Insufficient stock for " + product.getTitle() + " in " + variant.getSize()
+                            + " / " + variant.getColorName() + ": requested " + qty + " but not enough available");
         }
     }
 
     /**
-     * Returns reserved stock. Atomic bulk UPDATE so two concurrent returns of the same
-     * product cannot both read the old count and clobber each other (lost update). The
+     * Returns reserved stock. Atomic bulk UPDATE so two concurrent returns of the same line
+     * cannot both read the old count and clobber each other (lost update). The
      * @SQLDelete version-mismatch that used to break the order soft-delete has been fixed,
      * so a bulk statement can now safely share the transaction with the versioned delete.
+     *
+     * <p>{@code variantId} is null only on order lines written before V20 backfilled them;
+     * those still hold stock at product level, so the legacy counter is what gets returned.
      */
-    private void returnStock(Long productId, int qty) {
-        productRepository.increaseStock(productId, qty);
+    private void returnStock(Long variantId, Long productId, int qty, Set<Long> touchedProducts) {
+        if (variantId == null) {
+            productRepository.increaseStock(productId, qty);
+            touchedProducts.add(productId);
+            return;
+        }
+        variantRepository.increaseStock(variantId, qty);
+        touchedProducts.add(productId);
+    }
+
+    /**
+     * Variants are the source of truth for stock; {@code products.stock} is a legacy
+     * aggregate that the admin low-stock report and old readers still use. Recomputed once
+     * per touched product instead of per line, and after every stock mutation in the
+     * transaction, so it can never be left holding a half-applied delta.
+     */
+    private void resyncProductStock(Set<Long> productIds) {
+        for (Long productId : productIds) {
+            productRepository.setStock(productId, (int) variantRepository.sumStockByProductId(productId));
+        }
+    }
+
+    private static String lineKey(OrderProducts line) {
+        return lineKey(line.getProductId(), line.getVariantId());
+    }
+
+    private static String lineKey(Long productId, Long variantId) {
+        return productId + ":" + variantId;
     }
 
     /**

@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,12 +38,14 @@ import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
+import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderItemAction;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
+import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.utils.PageResponse;
 
@@ -62,7 +65,15 @@ class OrderServiceTest {
     private ProductRepository productRepository;
 
     @Mock
+    private ProductVariantRepository variantRepository;
+
+    @Mock
     private UserRepository userRepository;
+
+    // Stock reservation now happens on the variant, so the rule that picks one is exercised
+    // by VariantResolverTest; here it is stubbed to keep this class about order semantics.
+    @Mock
+    private VariantResolver variantResolver;
 
     @Mock
     private org.springframework.context.ApplicationEventPublisher events;
@@ -79,6 +90,32 @@ class OrderServiceTest {
                 .build();
         product.setId(1L);
         return product;
+    }
+
+    private ProductVariant sampleVariant() {
+        ProductVariant variant = ProductVariant.builder()
+                .sku("IPHONE-BLACK-M")
+                .size("M")
+                .colorName("Black")
+                .colorHex("#000000")
+                .priceDelta(BigDecimal.ZERO)
+                .stock(10)
+                .build();
+        variant.setId(11L);
+        return variant;
+    }
+
+    /**
+     * Stubs the variant pipeline for a one-variant order of {@link #sampleProduct()}. Lenient
+     * because not every path reaches all three: a rejected quantity stops before the sum, and
+     * an existing line is never repriced.
+     */
+    private void givenSingleVariantStock(int remainingAfterSale) {
+        ProductVariant variant = sampleVariant();
+        lenient().when(variantResolver.resolve(any(Product.class), any())).thenReturn(variant);
+        lenient().when(variantResolver.unitPrice(any(Product.class), any(ProductVariant.class)))
+                .thenAnswer(inv -> inv.getArgument(0, Product.class).getPrice());
+        lenient().when(variantRepository.sumStockByProductId(1L)).thenReturn((long) remainingAfterSale);
     }
 
     private Order sampleOrder() {
@@ -184,15 +221,20 @@ class OrderServiceTest {
     void deleteOrder_returnsReservedStockSoftDeletesLineItemsThenDeletes() {
         Order order = sampleOrder();
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
-        // Scalar (productId, quantity) pairs -- no managed OrderProducts are loaded, so the
-        // commit never sees a line item referencing the soft-deleted Order.
-        List<Object[]> deltas = List.of(new Object[]{1L, 2}, new Object[]{5L, 1});
+        // Scalar (variantId, productId, quantity) triples -- no managed OrderProducts are
+        // loaded, so the commit never sees a line item referencing the soft-deleted Order.
+        // The null variant is a pre-V20 line, whose stock still lives on the product.
+        List<Object[]> deltas = List.of(new Object[]{11L, 1L, 2}, new Object[]{null, 5L, 1});
         when(orderProductsRepository.findStockDeltasByOrderId(1L)).thenReturn(deltas);
+        when(variantRepository.sumStockByProductId(1L)).thenReturn(10L);
+        when(variantRepository.sumStockByProductId(5L)).thenReturn(4L);
 
         orderService.deleteOrder(1L);
 
-        verify(productRepository).increaseStock(1L, 2);
+        verify(variantRepository).increaseStock(11L, 2);
         verify(productRepository).increaseStock(5L, 1);
+        verify(productRepository).setStock(1L, 10);
+        verify(productRepository).setStock(5L, 4);
         verify(orderProductsRepository).softDeleteByOrderId(1L);
         verify(orderRepository).delete(order);
     }
@@ -227,14 +269,17 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
         when(orderRepository.save(any(Order.class))).thenReturn(order);
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
-        when(productRepository.decrementStock(1L, 2)).thenReturn(1);
+        when(variantRepository.decrementStock(11L, 2)).thenReturn(1);
+        givenSingleVariantStock(8);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
         GetOrderResponseDto result = orderService.createOrder(dto, 1L);
 
         assertEquals(OrderStatus.PENDING, result.getOrderStatus());
         verify(orderProductsRepository).saveAll(anyList());
-        verify(productRepository).decrementStock(1L, 2);
+        verify(variantRepository).decrementStock(11L, 2);
+        // The legacy product counter mirrors the variant aggregate instead of being decremented.
+        verify(productRepository).setStock(1L, 8);
     }
 
     @Test
@@ -248,7 +293,8 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
         when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(sampleProduct()));
-        when(productRepository.decrementStock(1L, 1)).thenReturn(1);
+        when(variantRepository.decrementStock(11L, 1)).thenReturn(1);
+        givenSingleVariantStock(9);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
         orderService.createOrder(dto, 1L);
@@ -301,6 +347,7 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
         when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(sampleProduct()));
+        givenSingleVariantStock(10);
 
         assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, 1L));
         verify(orderProductsRepository, never()).saveAll(anyList());
@@ -315,7 +362,8 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
         when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(sampleProduct()));
-        when(productRepository.decrementStock(1L, 5)).thenReturn(0);
+        givenSingleVariantStock(0);
+        when(variantRepository.decrementStock(11L, 5)).thenReturn(0);
 
         assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, 1L));
         verify(orderProductsRepository, never()).saveAll(anyList());
@@ -366,7 +414,8 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
-        when(productRepository.decrementStock(1L, 2)).thenReturn(1);
+        when(variantRepository.decrementStock(11L, 2)).thenReturn(1);
+        givenSingleVariantStock(8);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(new ArrayList<>());
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
@@ -379,7 +428,8 @@ class OrderServiceTest {
     void updateOrder_removeAction_deletesExistingLineItem() {
         Order order = sampleOrder();
         Product product = sampleProduct();
-        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L).quantity(1).build();
+        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L)
+                        .variant(sampleVariant()).variantId(11L).quantity(1).build();
         existing.setId(10L);
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
                 .orderItems(List.of(OrderItemActionDto.builder()
@@ -391,11 +441,13 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
+        givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
         orderService.updateOrder(1L, dto);
 
+        verify(variantRepository).increaseStock(11L, 1);
         verify(orderProductsRepository).deleteAll(List.of(existing));
     }
 
@@ -403,7 +455,8 @@ class OrderServiceTest {
     void updateOrder_incrementAction_increasesQuantity() {
         Order order = sampleOrder();
         Product product = sampleProduct();
-        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L).quantity(1).build();
+        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L)
+                        .variant(sampleVariant()).variantId(11L).quantity(1).build();
         existing.setId(10L);
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
                 .orderItems(List.of(OrderItemActionDto.builder()
@@ -415,7 +468,8 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
-        when(productRepository.decrementStock(1L, 1)).thenReturn(1);
+        when(variantRepository.decrementStock(11L, 1)).thenReturn(1);
+        givenSingleVariantStock(9);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
@@ -429,7 +483,8 @@ class OrderServiceTest {
     void updateOrder_decrementAction_whenQuantityGreaterThanOne_reducesQuantity() {
         Order order = sampleOrder();
         Product product = sampleProduct();
-        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L).quantity(2).build();
+        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L)
+                        .variant(sampleVariant()).variantId(11L).quantity(2).build();
         existing.setId(10L);
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
                 .orderItems(List.of(OrderItemActionDto.builder()
@@ -441,6 +496,7 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
+        givenSingleVariantStock(11);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
@@ -454,7 +510,8 @@ class OrderServiceTest {
     void updateOrder_decrementAction_whenQuantityIsOne_removesLineItem() {
         Order order = sampleOrder();
         Product product = sampleProduct();
-        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L).quantity(1).build();
+        OrderProducts existing = OrderProducts.builder().order(order).product(product).productId(1L)
+                        .variant(sampleVariant()).variantId(11L).quantity(1).build();
         existing.setId(10L);
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
                 .orderItems(List.of(OrderItemActionDto.builder()
@@ -466,6 +523,7 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
+        givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
@@ -487,6 +545,7 @@ class OrderServiceTest {
 
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
+        givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(new ArrayList<>());
 
         assertThrows(ResourceNotFoundException.class, () -> orderService.updateOrder(1L, dto));
