@@ -15,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.nexusCommerce.dtos.CreatePaymentResponseDto;
 import com.example.nexusCommerce.dtos.GetPaymentStatusResponseDto;
 import com.example.nexusCommerce.dtos.VerifyPaymentRequestDto;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
+import com.example.nexusCommerce.exceptions.InvalidCredentialsException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
@@ -131,7 +133,7 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
     @Override
     public void handleWebhook(byte[] rawBody, String signatureHeader) {
         if (!razorpay.webhookSignatureMatches(rawBody, signatureHeader)) {
-            throw new InvalidRequestException("Razorpay webhook signature did not match");
+            throw new InvalidCredentialsException("Razorpay webhook signature did not match");
         }
         RazorpayClient.WebhookEvent event = razorpay.parseWebhook(rawBody);
         if (event.razorpayOrderId() == null) {
@@ -184,7 +186,7 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order with id: " + orderId + " Not Found!"));
         if (!order.getUser().getId().equals(userId)) {
-            throw new InvalidRequestException("Order " + orderId + " does not belong to user " + userId);
+            throw new ForbiddenException("Order " + orderId + " does not belong to user " + userId);
         }
         return order;
     }

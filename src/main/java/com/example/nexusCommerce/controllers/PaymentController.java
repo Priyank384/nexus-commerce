@@ -74,7 +74,8 @@ public class PaymentController {
      */
     @Operation(summary = "Razorpay webhook",
                description = "Server-to-server payment events. Requires no user token; verified by the "
-                             + "X-Razorpay-Signature HMAC and configured to return 2xx even for unknown "
+                             + "X-Razorpay-Signature HMAC (a missing or forged signature is a caller-auth "
+                             + "failure and answers 401) and configured to return 2xx even for unknown "
                              + "orders so the gateway stops retrying.")
     @PostMapping("/razorpay/webhook")
     public ResponseEntity<ApiResponse<Map<String, Object>>> webhook(

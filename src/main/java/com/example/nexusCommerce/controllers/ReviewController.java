@@ -61,7 +61,7 @@ public class ReviewController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteReview(@PathVariable Long id) {
         reviewService.deleteReview(id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
+        return ResponseEntity.status(HttpStatus.OK)
                 .body(ApiResponse.success(null, "Review deleted successfully"));
     }
 

@@ -27,6 +27,7 @@ import com.example.nexusCommerce.dtos.AddToWishlistRequestDto;
 import com.example.nexusCommerce.dtos.CreateWishlistRequestDto;
 import com.example.nexusCommerce.dtos.GetWishlistResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.ProductRepository;
@@ -247,7 +248,7 @@ class WishlistServiceTest {
         Wishlist theirs = existingWishlist(2L, "Theirs");
         when(productRepository.findById(1101L)).thenReturn(Optional.of(product(1101L)));
 
-        assertThrows(InvalidRequestException.class, () -> service.addItem(1L, theirs.getId(),
+        assertThrows(ForbiddenException.class, () -> service.addItem(1L, theirs.getId(),
                 AddToWishlistRequestDto.builder().productId(1101L).build()));
     }
 

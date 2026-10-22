@@ -25,6 +25,7 @@ import com.example.nexusCommerce.adapters.ReviewAdapter;
 import com.example.nexusCommerce.dtos.CreateReviewRequestDto;
 import com.example.nexusCommerce.dtos.GetReviewResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
@@ -206,7 +207,7 @@ class ReviewServiceTest {
     }
 
     @Test
-    void createReview_whenNotOrderOwner_throwsInvalidRequestException() {
+    void createReview_whenNotOrderOwner_throwsForbiddenException() {
         Order order = sampleOrder();
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
@@ -216,7 +217,7 @@ class ReviewServiceTest {
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
 
-        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 42L));
+        assertThrows(ForbiddenException.class, () -> reviewService.createReview(dto, 42L));
         verify(reviewRepository, never()).save(any(Review.class));
     }
 

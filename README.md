@@ -17,7 +17,7 @@ NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("
 - **Wishlists** — Multi-list, per-user (`/api/v1/wishlist`). Create and delete named lists, save a product to the default list or a specific one, remove by product id, all owner-scoped. Saving a product already on the list restates it instead of duplicating.
 - **Address book** — `/api/v1/addresses`: save, list, update, delete, and mark a default for shipping or billing. The first address is the default; a later one cannot steal that slot silently.
 - **Payments (Razorpay)** — Server-side intent creation, browser Checkout, signature-verified capture, and a webhook reconciler (`/api/v1/payments/**`). Three invariants make it safe: signatures are recomputed over the **stored** intent, never over a client-supplied id; settling is a **conditional UPDATE**, so a client verify and Razorpay's webhook racing for the same order produce exactly one confirmation mail; and a repeat `createPayment` **reuses the intent** while the order still prices the same (V24 records the amount). See [Phase 2a in PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#19-phase-2a--apparel-catalogue-wishlists-addresses-and-payments).
-- **Inventory** — Placing an order atomically decrements **variant** stock (oversell-safe); admins restock a product via `PUT /api/v1/admin/products/{id}/stock` or a single variant via `PUT /api/v1/products/variants/{variantId}`.
+- **Inventory** — Placing an order atomically decrements **variant** stock (oversell-safe); admins restock a single variant via `PUT /api/v1/products/variants/{variantId}`. `PUT /api/v1/admin/products/{id}/stock` only works for a style with no variants (or exactly one, which it writes through); a product with a size+colour grid answers **400** there, because the variant rows are the source of truth and an aggregate-only write is undone by the next resync.
 - **Orders** — Create orders from a list of line items (product id + quantity), list/fetch/update/delete orders, fetch an order **summary**, and read **your own orders** (`/me`) or any user's (admin). Line items are **snapshotted** (price, name, image) so history never changes when the catalogue is edited. Both `POST /orders` and `POST /cart/checkout` accept an optional **`Idempotency-Key`** header so a retried submission can never place a duplicate order.
 - **Reviews** — Create reviews only when the product appears on the given order; at most **one review per (order, product)** pair; list reviews globally, by id, by product, or by order; delete by id (admin).
 - **Admin dashboard** — Aggregate business metrics, paged user listing, and user role/enable management (all `ROLE_ADMIN`).
@@ -417,7 +417,7 @@ All endpoints below require `ROLE_ADMIN`.
 | `GET` | `/users` | List users (paged). |
 | `GET` | `/users/{id}` | Get a user. |
 | `PATCH` | `/users/{id}` | Update a user's `role` and/or `enabled` (last-active-admin can't be disabled). |
-| `PUT` | `/products/{id}/stock` | Set a product's stock (`SetStockRequestDto`: `stock` ≥ 0). |
+| `PUT` | `/products/{id}/stock` | Set a product's stock (`SetStockRequestDto`: `stock` ≥ 0). **400 for a product with more than one variant** — restock those per variant. |
 | `POST` | `/products/{id}/image` | Multipart upload (`file`) — PNG/JPEG/WebP up to 5 MB. Writes under `UPLOAD_DIR` with a UUID filename, updates `product.image` to `/uploads/products/<file>` and returns the URL as the `data` field. |
 
 ### Actuator — `/actuator`
@@ -442,9 +442,9 @@ All endpoints below require `ROLE_ADMIN`.
 
 | Status | When |
 |--------|------|
-| `401` | Protected route called without a valid, un-revoked token, or a consumed/invalid refresh token. |
-| `403` | Valid token, but wrong role or not the resource owner. |
-| `400` | Invalid request (validation / business-rule violations) **or** missing required query parameter **or** concurrent idempotency-key collision **or** an ambiguous/absent `variantId` **or** a payment refused by the rules (already paid, under the gateway floor, bad signature). |
+| `401` | Protected route called without a valid, un-revoked token, a consumed/invalid refresh token, **or** a Razorpay webhook whose `X-Razorpay-Signature` is missing or does not match the HMAC of the raw body. |
+| `403` | Valid token, but wrong role or not the resource owner (`ForbiddenException` on an ownership guard). |
+| `400` | Invalid request (validation / business-rule violations) **or** missing required query parameter **or** concurrent idempotency-key collision **or** an ambiguous/absent `variantId` **or** a payment refused by the rules (already paid, under the gateway floor). |
 | `404` | Resource not found (e.g. missing id). |
 | `405` | Wrong HTTP method for a matched path. |
 | `409` | Duplicate resource (e.g. duplicate review for same order + product). |
@@ -452,7 +452,7 @@ All endpoints below require `ROLE_ADMIN`.
 | `500` | Unhandled exceptions (generic handler). |
 | `502` | The Razorpay call itself failed, or the gateway isn't configured on this server. A provider problem is never reported as a shopper's bad request — and never as a success. |
 
-Create/update endpoints may return **`201 Created`** or **`204 No Content`** where implemented in controllers.
+Creates answer **`201 Created`**; every other success, including `DELETE`, answers **`200 OK`** with the `ApiResponse` envelope. No endpoint returns `204 No Content` — a delete still carries `success`/`message` so one client path can read every response.
 
 ---
 

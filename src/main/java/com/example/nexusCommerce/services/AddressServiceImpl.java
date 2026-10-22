@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.nexusCommerce.adapters.AddressAdapter;
 import com.example.nexusCommerce.dtos.GetAddressResponseDto;
 import com.example.nexusCommerce.dtos.SaveAddressRequestDto;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.AddressRepository;
@@ -173,7 +174,7 @@ public class AddressServiceImpl implements AddressService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Address with id: " + addressId + " Not Found!"));
         if (!address.getUserId().equals(userId)) {
-            throw new InvalidRequestException("Address " + addressId + " does not belong to user " + userId);
+            throw new ForbiddenException("Address " + addressId + " does not belong to user " + userId);
         }
         return address;
     }

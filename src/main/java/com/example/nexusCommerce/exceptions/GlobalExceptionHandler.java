@@ -39,6 +39,17 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), "Duplicate resource!"));
     }
 
+    /**
+     * Matches the shape SecurityConfig's accessDeniedHandler writes for a role denial, so a
+     * storefront only has to branch on 401/403 and not on which layer said no.
+     */
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiResponse<Void>> handleForbidden(ForbiddenException ex){
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(ex.getMessage(), "Forbidden!"));
+    }
+
     @ExceptionHandler(InvalidRequestException.class)
     public ResponseEntity<ApiResponse<Void>> handleInvalidRequestException(InvalidRequestException ex){
         return ResponseEntity

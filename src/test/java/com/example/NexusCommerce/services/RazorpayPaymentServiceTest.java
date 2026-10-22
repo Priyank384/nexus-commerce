@@ -25,6 +25,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import com.example.nexusCommerce.dtos.CreatePaymentResponseDto;
 import com.example.nexusCommerce.dtos.GetPaymentStatusResponseDto;
 import com.example.nexusCommerce.dtos.VerifyPaymentRequestDto;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
+import com.example.nexusCommerce.exceptions.InvalidCredentialsException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
@@ -141,7 +143,7 @@ class RazorpayPaymentServiceTest {
         Order order = unpaidOrder(99L, null, null);
         givenOrder(order);
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(ForbiddenException.class, () -> paymentService.createPayment(1L, 7L));
         verify(orderRepository, never()).save(any());
     }
 
@@ -246,7 +248,7 @@ class RazorpayPaymentServiceTest {
     void webhook_whenSignatureDoesNotMatch_isRejectedWithoutReadingThePayload() {
         when(razorpay.webhookSignatureMatches(WEBHOOK_BODY, "forged")).thenReturn(false);
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.handleWebhook(WEBHOOK_BODY, "forged"));
+        assertThrows(InvalidCredentialsException.class, () -> paymentService.handleWebhook(WEBHOOK_BODY, "forged"));
         verify(orderRepository, never()).findByPaymentIntentId(any());
     }
 
@@ -325,7 +327,7 @@ class RazorpayPaymentServiceTest {
     void paymentStatus_forAnotherUsersOrder_isRejected() {
         givenOrder(unpaidOrder(99L, "order_RZP1", PaymentStatus.PAID));
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.paymentStatus(1L, 7L));
+        assertThrows(ForbiddenException.class, () -> paymentService.paymentStatus(1L, 7L));
     }
 
     @Test

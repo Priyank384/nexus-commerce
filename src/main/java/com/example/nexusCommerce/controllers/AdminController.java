@@ -74,7 +74,11 @@ public class AdminController {
     }
 
     @Operation(summary = "Set product stock",
-               description = "Overwrite a product's absolute stock level. Requires ROLE_ADMIN.")
+               description = "Overwrite a product's absolute stock level. Requires ROLE_ADMIN. "
+                             + "Only valid for a style with no variants or exactly one: a product with a "
+                             + "size+colour grid answers 400 here, because the variants are the source of "
+                             + "truth and an aggregate-only write is undone by the next resync. Restock those "
+                             + "per variant via PUT /api/v1/products/variants/{variantId}.")
     @PutMapping("/products/{id}/stock")
     public ResponseEntity<ApiResponse<GetProductResponseDto>> setStock(
             @PathVariable Long id, @Valid @RequestBody SetStockRequestDto requestDto) {

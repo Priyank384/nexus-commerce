@@ -15,6 +15,7 @@ import com.example.nexusCommerce.dtos.CreateWishlistRequestDto;
 import com.example.nexusCommerce.dtos.GetWishlistItemResponseDto;
 import com.example.nexusCommerce.dtos.GetWishlistResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.ProductRepository;
@@ -167,7 +168,7 @@ public class WishlistServiceImpl implements WishlistService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Wishlist with id: " + wishlistId + " Not Found!"));
         if (!userId.equals(ownerId(wishlist))) {
-            throw new InvalidRequestException("Wishlist " + wishlistId + " does not belong to user " + userId);
+            throw new ForbiddenException("Wishlist " + wishlistId + " does not belong to user " + userId);
         }
         return wishlist;
     }
@@ -190,7 +191,7 @@ public class WishlistServiceImpl implements WishlistService {
      */
     private GetWishlistResponseDto withItems(Wishlist wishlist, Long userId) {
         if (!userId.equals(ownerId(wishlist))) {
-            throw new InvalidRequestException("Wishlist " + wishlist.getId() + " does not belong to user " + userId);
+            throw new ForbiddenException("Wishlist " + wishlist.getId() + " does not belong to user " + userId);
         }
         List<WishlistItem> items = wishlistItemRepository.findByWishlistIdOrderByCreatedAtDesc(wishlist.getId());
         List<Long> productIds = items.stream().map(WishlistServiceImpl::productIdOf)

@@ -1075,17 +1075,17 @@ Historical orders are immutable in effect: the line items keep their snapshotted
 
 | HTTP status | Source | Example `error` / message |
 |-------------|--------|---------------------------|
-| **401** | No/invalid/revoked token on a protected route; consumed refresh token | `message: "Unauthorized!"` |
-| **403** | Authenticated but wrong role / not owner | `message: "Forbidden!"` |
+| **401** | No/invalid/revoked token on a protected route; consumed refresh token; Razorpay webhook signature missing or mismatched | `message: "Unauthorized!"` |
+| **403** | Authenticated but wrong role / not owner — either the security filter (`ROLE_ADMIN` routes) or `ForbiddenException` from an ownership guard | `message: "Forbidden!"`, `error: "You can only access your own orders"` |
 | **404** | `ResourceNotFoundException` | `Product with id: 99 Not Found!` |
 | **405** | `HttpRequestMethodNotSupportedException` | `Request method 'DELETE' not supported` |
 | **409** | `DuplicateResourceException` | `A review already exists for this order and product` |
-| **400** | `InvalidRequestException` / Bean Validation / ownership guard / disallowed `sort` field / **missing required query param** / concurrent idempotency-key collision | `You can only access your own orders`, `stock must not be negative`, `Order cannot be modified in DELIVERED/CANCELLED status`, `sort field not allowed: bogus`, `No products are sold in size 'zzz'`, `Required request parameter 'file' is not present` |
+| **400** | `InvalidRequestException` / Bean Validation / disallowed `sort` field / **missing required query param** / concurrent idempotency-key collision | `stock must not be negative`, `Order cannot be modified in DELIVERED/CANCELLED status`, `sort field not allowed: bogus`, `No products are sold in size 'zzz'`, `Required request parameter 'file' is not present` |
 | **429** | `LoginRateLimiterInterceptor` over threshold | `message: "Too many login attempts"`, `error: "Rate limit exceeded"` |
 | **502** | `PaymentProviderException` — Razorpay unconfigured, unreachable, or refused the request | `error: "Payment provider unavailable!"`, `message:` the upstream reason |
 | **500** | Unhandled | `Something went wrong!` + exception message |
 
-`401`/`403` are emitted by the security filter in the same `ApiResponse` shape as the rest of the API. `405`, missing-param `400`, `429` and `502` are emitted by `GlobalExceptionHandler` and the interceptor directly; all use the standard envelope. A payment-provider failure is `502` rather than `500` on purpose: it is a dependency fault, not a bug in this service, and the shopper can retry.
+`401`/`403` from the security filter and `403` from an in-service ownership guard (`ForbiddenException`) share the same `ApiResponse` shape, so a caller only branches on the status, not on which layer said no. `405`, missing-param `400`, `429` and `502` are emitted by `GlobalExceptionHandler` and the interceptor directly; all use the standard envelope. A payment-provider failure is `502` rather than `500` on purpose: it is a dependency fault, not a bug in this service, and the shopper can retry.
 
 ---
 
@@ -1121,7 +1121,7 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 - [ ] `POST /api/v1/orders` twice concurrently with same key → one succeeds, other sees `400` (in-flight conflict)
 - [ ] `GET /api/v1/orders/me`
 - [ ] `GET /api/v1/orders/{id}` and `/{id}/summary` (owner)
-- [ ] Access someone else's order id → **403**/400 ownership rejection
+- [ ] Access someone else's order (id, `/user/{id}`, `PUT`, summary) → **403** `Forbidden!`, never 400
 
 ### Reviews
 
@@ -1535,7 +1535,8 @@ Three rules make this survivable, and each one closed a bug rather than being de
   be resolved.
 
 The webhook is `permitAll` (it carries its own HMAC), is fed as raw bytes rather than a parsed
-body, and answers `2xx` even for an unknown intent so Razorpay stops retrying.
+body, and answers `2xx` even for an unknown intent so Razorpay stops retrying. A missing or
+mismatched signature is a caller-authentication failure, so it answers `401` rather than `400`.
 
 **Configuration** — credentials only ever come from the environment; empty defaults keep the app
 bootable and make payment endpoints answer `502` with an actionable message:

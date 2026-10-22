@@ -16,6 +16,7 @@ import com.example.nexusCommerce.adapters.ReviewAdapter;
 import com.example.nexusCommerce.dtos.CreateReviewRequestDto;
 import com.example.nexusCommerce.dtos.GetReviewResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
@@ -110,7 +111,7 @@ public class ReviewServiceImpl implements ReviewService {
 
         // Identity is taken from the token, and a customer may only review their own order.
         if (!order.getUser().getId().equals(authenticatedUserId)) {
-            throw new InvalidRequestException("You can only review your own orders");
+            throw new ForbiddenException("You can only review your own orders");
         }
 
         Product product = productRepository.findById(requestDto.getProductId())

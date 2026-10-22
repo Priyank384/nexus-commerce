@@ -18,7 +18,7 @@ import com.example.nexusCommerce.dtos.CreateOrderRequestDto;
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
-import com.example.nexusCommerce.exceptions.InvalidRequestException;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.security.AuthenticatedUser;
 import com.example.nexusCommerce.security.IdempotencyService;
 import com.example.nexusCommerce.services.OrderService;
@@ -86,7 +86,7 @@ public class OrderController {
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> deleteOrder(@PathVariable Long id) {
         orderService.deleteOrder(id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT).body(ApiResponse.success(null, "Order Deleted Successfully"));
+        return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(null, "Order Deleted Successfully"));
     }
 
     @Operation(summary = "Get an order by id",
@@ -108,7 +108,7 @@ public class OrderController {
             @RequestParam(name = "size", defaultValue = "20") int size,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         if (!caller.isAdmin() && !caller.id().equals(userId)) {
-            throw new InvalidRequestException("You can only view your own orders");
+            throw new ForbiddenException("You can only view your own orders");
         }
         PageResponse<GetOrderResponseDto> orders =
                 orderService.getOrdersByUserId(userId, page, Pagination.clampSize(size));
@@ -152,7 +152,7 @@ public class OrderController {
 
     private void assertCanAccess(GetOrderResponseDto order, AuthenticatedUser caller) {
         if (!caller.isAdmin() && !caller.id().equals(order.getUserId())) {
-            throw new InvalidRequestException("You can only access your own orders");
+            throw new ForbiddenException("You can only access your own orders");
         }
     }
 }
