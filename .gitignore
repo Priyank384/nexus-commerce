@@ -46,3 +46,6 @@ newrelic/newrelic.jar
 
 # Local uploads (multipart product images stored on the filesystem)
 uploads/
+
+# Time-stamped .env backups taken before switching datasource — never commit these.
+.env.bak*

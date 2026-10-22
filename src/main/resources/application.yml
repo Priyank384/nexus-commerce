@@ -4,10 +4,13 @@ spring:
   application:
     name: NexusCommerce
   datasource:
-    url: jdbc:mysql://localhost:3306/nexuscommerce?useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true
-    username: ${username}
-    password: ${password}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    # Every value below keeps the historical local-MySQL setup as its default, so booting
+    # without a DB_* override is byte-identical to before. Pointing at PostgreSQL (Aiven)
+    # is a .env change only: DB_URL, DB_USER, DB_PASSWORD, DB_DRIVER, FLYWAY_LOCATIONS.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/nexuscommerce?useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true}
+    username: ${DB_USER:${username}}
+    password: ${DB_PASSWORD:${password}}
+    driver-class-name: ${DB_DRIVER:com.mysql.cj.jdbc.Driver}
     hikari:
       # Default of 10 was saturating under concurrent cached requests, and a longer
       # checkout wait turns saturation into visible latency spikes.
@@ -36,7 +39,8 @@ spring:
         jdbc.fetch_size: 2000
   flyway:
     enabled: true
-    locations: classpath:db/migration 
+    # db/migration is MySQL, db/migration-postgres is the parallel PostgreSQL set.
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration}
   profiles:
     active: dev
   servlet:
