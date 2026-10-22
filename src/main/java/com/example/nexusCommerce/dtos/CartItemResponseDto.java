@@ -20,4 +20,12 @@ public class CartItemResponseDto {
     private Integer quantity;
     /** unitPrice * quantity, computed on read. */
     private BigDecimal lineTotal;
+
+    private Long variantId;
+    private String sku;
+    private String variantSize;
+    private String variantColorName;
+    private String variantColorHex;
+    /** Stock left on the selected variant; null when the line is not variant-scoped. */
+    private Integer variantStock;
 }

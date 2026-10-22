@@ -109,7 +109,10 @@ public class CartServiceImpl implements CartService {
                 && !override.getOrderItems().isEmpty())
                 ? override.getOrderItems()
                 : cart.getItems().stream()
-                        .map(i -> new OrderItemRequestDto(i.getProduct().getId(), i.getQuantity()))
+                        .map(i -> OrderItemRequestDto.builder()
+                                .productId(i.getProduct().getId())
+                                .quantity(i.getQuantity())
+                                .build())
                         .toList();
         CreateOrderRequestDto request = new CreateOrderRequestDto();
         request.setOrderItems(items);

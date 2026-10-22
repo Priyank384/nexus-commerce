@@ -43,6 +43,10 @@ public class OrderAdapter {
                         .productName(op.getProductName())
                         .productPrice(op.getUnitPrice())
                         .productImage(op.getProductImage())
+                        .variantId(op.getVariantId())
+                        .variantSize(op.getVariantSize())
+                        .variantColorName(op.getVariantColorName())
+                        .variantColorHex(op.getVariantColorHex())
                         .subTotal(op.getUnitPrice().multiply(BigDecimal.valueOf(op.getQuantity())))
                         .build()).collect(Collectors.toList());
     }

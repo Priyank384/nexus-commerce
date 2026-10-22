@@ -19,4 +19,9 @@ public class GetProductResponseDto {
     private String image;
     private BigDecimal rating;
     private Integer stock;
+
+    /** Read-only fields the storefront listing cards need without a details call. */
+    private String slug;
+    private String brand;
+    private BigDecimal compareAtPrice;
 }
