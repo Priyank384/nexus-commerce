@@ -32,7 +32,9 @@ import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
+import com.example.nexusCommerce.repositories.ProductImageRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
+import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -46,6 +48,12 @@ class ProductServiceTest {
 
     @Mock
     private CategoryRepository categoryRepository;
+
+    @Mock
+    private ProductVariantRepository variantRepository;
+
+    @Mock
+    private ProductImageRepository imageRepository;
 
     @Spy
     private ProductAdapter productAdapter = new ProductAdapter();
@@ -207,7 +215,7 @@ class ProductServiceTest {
 
     @Test
     void findByCategory_returnsTrimmedLookupWithCategoryNames() {
-        when(categoryRepository.findByNameIgnoreCase("Electronics"))
+        when(categoryRepository.findFirstByNameIgnoreCaseOrderByIdAsc("Electronics"))
                 .thenReturn(Optional.of(Category.builder().name("Electronics").build()));
         when(productRepository.findByCategory_NameIgnoreCase(eq("Electronics"), any(Pageable.class)))
                 .thenReturn(page(List.of(sampleProduct())));

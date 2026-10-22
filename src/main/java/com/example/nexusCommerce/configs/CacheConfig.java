@@ -31,12 +31,18 @@ public class CacheConfig implements CachingConfigurer {
 
     public static final String CATEGORY_ALL = "category:all";
     public static final String CATEGORY_BY_ID = "category:by-id";
+    public static final String CATEGORY_TREE = "category:tree";
 
     public static final String PRODUCT_ALL = "product:all";
     public static final String PRODUCT_BY_ID = "product:by-id";
+    public static final String PRODUCT_BY_SLUG = "product:by-slug";
     public static final String PRODUCT_DETAILS = "product:details";
     public static final String PRODUCT_BY_CATEGORY = "product:by-category";
     public static final String PRODUCT_UNIQUE_CATEGORIES = "product:unique-categories";
+    public static final String PRODUCT_SEARCH = "product:search";
+
+    public static final String VARIANT_SIZE_VALUES = "variant:sizes";
+    public static final String VARIANT_COLOR_VALUES = "variant:colors";
 
     public static final String ORDER_ALL = "order:all";
     public static final String ORDER_BY_ID = "order:by-id";
@@ -61,10 +67,15 @@ public class CacheConfig implements CachingConfigurer {
         Map<String, RedisCacheConfiguration> perCache = Map.ofEntries(
                 Map.entry(CATEGORY_ALL, list),
                 Map.entry(CATEGORY_BY_ID, baseConfig(ITEM_TTL)),
+                Map.entry(CATEGORY_TREE, baseConfig(AGGREGATE_TTL)),
                 Map.entry(PRODUCT_ALL, list),
                 Map.entry(PRODUCT_BY_ID, baseConfig(ITEM_TTL)),
+                Map.entry(PRODUCT_BY_SLUG, baseConfig(ITEM_TTL)),
                 Map.entry(PRODUCT_DETAILS, baseConfig(ITEM_TTL)),
                 Map.entry(PRODUCT_BY_CATEGORY, list),
+                Map.entry(PRODUCT_SEARCH, list),
+                Map.entry(VARIANT_SIZE_VALUES, baseConfig(AGGREGATE_TTL)),
+                Map.entry(VARIANT_COLOR_VALUES, baseConfig(AGGREGATE_TTL)),
                 Map.entry(PRODUCT_UNIQUE_CATEGORIES, baseConfig(AGGREGATE_TTL)),
                 Map.entry(ORDER_ALL, list),
                 Map.entry(ORDER_BY_ID, baseConfig(ITEM_TTL)),
@@ -88,8 +99,9 @@ public class CacheConfig implements CachingConfigurer {
     @Bean
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "simple")
     public ConcurrentMapCacheManager simpleCacheManager() {
-        return new ConcurrentMapCacheManager(CATEGORY_ALL, CATEGORY_BY_ID,
-                PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_UNIQUE_CATEGORIES,
+        return new ConcurrentMapCacheManager(CATEGORY_ALL, CATEGORY_BY_ID, CATEGORY_TREE,
+                PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY,
+                PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, VARIANT_SIZE_VALUES, VARIANT_COLOR_VALUES,
                 ORDER_ALL, ORDER_BY_ID, ORDER_SUMMARY,
                 REVIEW_ALL, REVIEW_BY_ID, REVIEW_BY_PRODUCT, REVIEW_BY_ORDER);
     }

@@ -51,7 +51,7 @@ class CategoryServiceTest {
         Category savedCategory = Category.builder().name("Test Category").build();
         savedCategory.setId(1L);
 
-        when(categoryRepository.existsByNameIgnoreCase("Test Category")).thenReturn(false);
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Test Category")).thenReturn(Optional.empty());
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
 
         GetCategoryResponseDto result = categoryService.createCategory(dto);
@@ -66,7 +66,7 @@ class CategoryServiceTest {
         Category savedCategory = Category.builder().name("Electronics").build();
         savedCategory.setId(1L);
 
-        when(categoryRepository.existsByNameIgnoreCase("Electronics")).thenReturn(false);
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Electronics")).thenReturn(Optional.empty());
         when(categoryRepository.save(any(Category.class))).thenReturn(savedCategory);
 
         GetCategoryResponseDto result = categoryService.createCategory(dto);
@@ -84,7 +84,9 @@ class CategoryServiceTest {
     @Test
     void createCategory_whenDuplicateName_throwsDuplicateResourceException() {
         CreateCategoryRequestDto dto = CreateCategoryRequestDto.builder().name("Electronics").build();
-        when(categoryRepository.existsByNameIgnoreCase("Electronics")).thenReturn(true);
+        Category taken = Category.builder().name("Electronics").build();
+        taken.setId(2L);
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Electronics")).thenReturn(Optional.of(taken));
 
         assertThrows(DuplicateResourceException.class, () -> categoryService.createCategory(dto));
     }
@@ -124,7 +126,7 @@ class CategoryServiceTest {
 
     @Test
     void deleteCategory_deletesWhenCategoryExists() {
-        when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(liveCategory()));
         when(productRepository.existsByCategory_Id(1L)).thenReturn(false);
 
         categoryService.deleteCategory(1L);
@@ -134,7 +136,7 @@ class CategoryServiceTest {
 
     @Test
     void deleteCategory_whenCategoryHasProducts_throwsInvalidRequestAndKeepsIt() {
-        when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(liveCategory()));
         when(productRepository.existsByCategory_Id(1L)).thenReturn(true);
 
         assertThrows(InvalidRequestException.class, () -> categoryService.deleteCategory(1L));
@@ -143,9 +145,15 @@ class CategoryServiceTest {
 
     @Test
     void deleteCategory_whenNotFound_throwsResourceNotFoundException() {
-        when(categoryRepository.existsById(1L)).thenReturn(false);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> categoryService.deleteCategory(1L));
+    }
+
+    private static Category liveCategory() {
+        Category category = Category.builder().name("Electronics").build();
+        category.setId(1L);
+        return category;
     }
 
     @Test
@@ -157,7 +165,7 @@ class CategoryServiceTest {
         updated.setId(1L);
 
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(categoryRepository.findByNameIgnoreCase("Updated Name")).thenReturn(Optional.empty());
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Updated Name")).thenReturn(Optional.empty());
         when(categoryRepository.save(existing)).thenReturn(updated);
 
         GetCategoryResponseDto result = categoryService.updateCategory(1L, dto);
@@ -182,7 +190,7 @@ class CategoryServiceTest {
         other.setId(2L);
 
         when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
-        when(categoryRepository.findByNameIgnoreCase("Electronics")).thenReturn(Optional.of(other));
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Electronics")).thenReturn(Optional.of(other));
 
         assertThrows(DuplicateResourceException.class, () -> categoryService.updateCategory(1L, dto));
     }

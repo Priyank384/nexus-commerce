@@ -80,7 +80,7 @@ public class ProductAdapter {
         BigDecimal delta = variant.getPriceDelta() != null ? variant.getPriceDelta() : BigDecimal.ZERO;
         return GetVariantResponseDto.builder()
                 .id(variant.getId())
-                .productId(variant.getProductId())
+                .productId(resolveProductId(variant))
                 .sku(variant.getSku())
                 .size(variant.getSize())
                 .colorName(variant.getColorName())
@@ -90,6 +90,18 @@ public class ProductAdapter {
                 .stock(variant.getStock())
                 .price(productPrice != null ? productPrice.add(delta) : null)
                 .build();
+    }
+
+    /**
+     * product_id is an insertable=false view of the association, so it is only guaranteed on a
+     * row Hibernate has loaded. A variant saved moments ago still carries the association, and
+     * reading the identifier off that proxy does not trigger a load.
+     */
+    private static Long resolveProductId(ProductVariant variant) {
+        if (variant.getProductId() != null) {
+            return variant.getProductId();
+        }
+        return variant.getProduct() != null ? variant.getProduct().getId() : null;
     }
 
     public List<GetVariantResponseDto> mapToGetVariantResponseDtoList(List<ProductVariant> variants,

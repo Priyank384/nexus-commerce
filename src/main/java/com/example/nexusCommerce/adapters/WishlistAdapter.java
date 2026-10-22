@@ -45,7 +45,9 @@ public class WishlistAdapter {
         GetWishlistItemResponseDto.GetWishlistItemResponseDtoBuilder builder =
                 GetWishlistItemResponseDto.builder()
                         .id(item.getId())
-                        .productId(item.getProductId())
+                        // Prefer the loaded product's id: item.productId is an insertable=false
+                        // view of the association and is only backfilled on a loaded row.
+                        .productId(product != null ? product.getId() : item.getProductId())
                         .productTitle(product != null ? product.getTitle() : null)
                         .productImage(product != null ? product.getImage() : null)
                         .price(product != null ? product.getPrice() : null)

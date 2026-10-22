@@ -27,9 +27,9 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
 
     boolean existsByCategory_Id(Long categoryId);
 
-    Optional<Product> findBySlug(String slug);
-
     boolean existsBySlug(String slug);
+
+    boolean existsBySlugAndIdNot(String slug, Long id);
 
     @Query(value = "SELECT DISTINCT c.name FROM products p "
             + "JOIN categories c ON p.category_id = c.id "
@@ -39,23 +39,76 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
     @Query("select p from Product p JOIN FETCH p.category WHERE p.id = :id")
     List<Product> findProductWithDetailsById(Long id);
 
-    long countByStockLessThanEqual(Integer stock);
-
     /**
-     * Atomic, conditional decrement so two concurrent orders can never oversell the last
-     * unit: the row is only updated while enough stock remains, and the affected-row count
-     * tells the caller whether it won the race.
+     * Faceted catalogue search. Size and colour filters use EXISTS rather than a join so a
+     * product with six matching variants still counts once, which keeps both the page and
+     * the total correct without DISTINCT. The {@code *Count} parameters exist because a list
+     * cannot be compared to NULL in JPQL: zero means "no filter", and the list always holds
+     * at least one element so no engine has to render an empty IN ().
      */
-    @Modifying
-    @Query("UPDATE Product p SET p.stock = p.stock - :qty WHERE p.id = :id AND p.stock >= :qty")
-    int decrementStock(@Param("id") Long id, @Param("qty") int qty);
+    @Query(value = """
+            SELECT p FROM Product p
+            JOIN FETCH p.category c
+            LEFT JOIN c.parent pc
+            WHERE p.isActive = TRUE
+              AND (:gender IS NULL OR LOWER(p.gender) = :gender)
+              AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:minPrice IS NULL OR p.price >= :minPrice)
+              AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+              AND (:sizeCount = 0 OR EXISTS (
+                    SELECT 1 FROM ProductVariant v WHERE v.product = p AND LOWER(v.size) IN :sizes))
+              AND (:colorCount = 0 OR EXISTS (
+                    SELECT 1 FROM ProductVariant v WHERE v.product = p AND LOWER(v.colorName) IN :colors))
+            """,
+        countQuery = """
+            SELECT COUNT(p) FROM Product p
+            JOIN p.category c
+            LEFT JOIN c.parent pc
+            WHERE p.isActive = TRUE
+              AND (:gender IS NULL OR LOWER(p.gender) = :gender)
+              AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:minPrice IS NULL OR p.price >= :minPrice)
+              AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+              AND (:sizeCount = 0 OR EXISTS (
+                    SELECT 1 FROM ProductVariant v WHERE v.product = p AND LOWER(v.size) IN :sizes))
+              AND (:colorCount = 0 OR EXISTS (
+                    SELECT 1 FROM ProductVariant v WHERE v.product = p AND LOWER(v.colorName) IN :colors))
+            """)
+    Page<Product> search(@Param("gender") String gender,
+                         @Param("categorySlug") String categorySlug,
+                         @Param("minPrice") BigDecimal minPrice,
+                         @Param("maxPrice") BigDecimal maxPrice,
+                         @Param("sizes") List<String> sizes,
+                         @Param("sizeCount") int sizeCount,
+                         @Param("colors") List<String> colors,
+                         @Param("colorCount") int colorCount,
+                         Pageable pageable);
+
+    @EntityGraph(attributePaths = {"category", "category.parent"})
+    Optional<Product> findBySlugIgnoreCase(String slug);
+
+    /** Every size and colour actually on sale, used to reject invented filter values. */
+    @Query("SELECT DISTINCT v.size FROM ProductVariant v")
+    List<String> findUniqueVariantSizes();
+
+    @Query("SELECT DISTINCT v.colorName FROM ProductVariant v")
+    List<String> findUniqueVariantColors();
+
+    long countByStockLessThanEqual(Integer stock);
 
     /**
      * Atomic stock return. Done as a bulk UPDATE rather than a read-modify-write on a
      * managed entity: two concurrent returns for the same product would otherwise both read
      * the old stock and the second write would silently clobber the first (lost update).
+     * Only pre-V20 order lines, which carry no variant, are refunded this way; every other
+     * reservation returns stock on its variant.
      */
     @Modifying
     @Query("UPDATE Product p SET p.stock = p.stock + :qty WHERE p.id = :id")
     int increaseStock(@Param("id") Long id, @Param("qty") int qty);
+
+    /** Absolute write used to mirror the variant stock aggregate onto the legacy column. */
+    @Modifying
+    @Query("UPDATE Product p SET p.stock = :stock WHERE p.id = :id")
+    int setStock(@Param("id") Long id, @Param("stock") int stock);
 }

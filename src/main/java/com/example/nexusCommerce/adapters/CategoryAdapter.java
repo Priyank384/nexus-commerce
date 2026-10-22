@@ -18,7 +18,7 @@ public class CategoryAdapter {
                 .name(category.getName())
                 .slug(category.getSlug())
                 .description(category.getDescription())
-                .parentId(category.getParentId())
+                .parentId(resolveParentId(category))
                 .createdAt(category.getCreatedAt())
                 .updatedAt(category.getUpdatedAt())
                 .build();
@@ -38,7 +38,20 @@ public class CategoryAdapter {
                 .name(category.getName())
                 .slug(category.getSlug())
                 .description(category.getDescription())
-                .parentId(category.getParentId())
+                .parentId(resolveParentId(category))
                 .build();
+    }
+
+    /**
+     * parent_id is an insertable=false, updatable=false view of the association, so it is only
+     * backfilled when Hibernate loads the row. A category that was just saved from a request
+     * still has the association set, and reading the identifier off that proxy does not trigger
+     * a load.
+     */
+    private static Long resolveParentId(Category category) {
+        if (category.getParentId() != null) {
+            return category.getParentId();
+        }
+        return category.getParent() != null ? category.getParent().getId() : null;
     }
 }

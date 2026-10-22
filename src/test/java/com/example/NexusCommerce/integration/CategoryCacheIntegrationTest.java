@@ -26,6 +26,7 @@ import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
 import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.repositories.CategoryRepository;
+import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.services.CategoryService;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -46,6 +47,11 @@ class CategoryCacheIntegrationTest {
 
     @MockitoBean
     private CategoryRepository categoryRepository;
+
+    // The category caches and the product caches are evicted together, so the product
+    // repository is stubbed out to keep this class about cache behaviour, not schema state.
+    @MockitoBean
+    private ProductRepository productRepository;
 
     @BeforeEach
     void clearCache() {
@@ -91,7 +97,7 @@ class CategoryCacheIntegrationTest {
         when(categoryRepository.findAll(any(Pageable.class)))
                 .thenReturn(page(List.of(category(1L, "Electronics"))))
                 .thenReturn(page(List.of(category(1L, "Electronics"), created)));
-        when(categoryRepository.existsByNameIgnoreCase("Books")).thenReturn(false);
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Books")).thenReturn(Optional.empty());
         when(categoryRepository.save(any(Category.class))).thenReturn(created);
 
         assertEquals(1, categoryService.getAllCategory(0, 20).getContent().size());
@@ -108,7 +114,9 @@ class CategoryCacheIntegrationTest {
         when(categoryRepository.findAll(any(Pageable.class)))
                 .thenReturn(page(List.of(category(1L, "Electronics"))))
                 .thenReturn(page(List.of()));
-        when(categoryRepository.existsById(1L)).thenReturn(true);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category(1L, "Electronics")));
+        when(productRepository.existsByCategory_Id(1L)).thenReturn(false);
+        when(categoryRepository.countByParentId(1L)).thenReturn(0L);
 
         assertEquals(1, categoryService.getAllCategory(0, 20).getContent().size());
 
@@ -135,7 +143,8 @@ class CategoryCacheIntegrationTest {
     void failedWriteDoesNotEvictAnything() {
         when(categoryRepository.findAll(any(Pageable.class)))
                 .thenReturn(page(List.of(category(1L, "Electronics"))));
-        when(categoryRepository.existsByNameIgnoreCase("Electronics")).thenReturn(true);
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Electronics"))
+                .thenReturn(Optional.of(category(1L, "Electronics")));
 
         assertEquals(1, categoryService.getAllCategory(0, 20).getContent().size());
 
