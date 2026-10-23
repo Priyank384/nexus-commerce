@@ -7,7 +7,10 @@ COPY . /workspace
 # The New Relic agent jar is untracked in git (added to .gitignore in an earlier
 # commit). The image runs without it by default; mount it in at deploy time if
 # you want APM.
-RUN chmod +x ./gradlew && ./gradlew clean bootJar --no-daemon -x test
+# The cache mount keeps the wrapper distribution and dependency jars between builds;
+# without it every source change re-downloads them into a fresh layer.
+RUN --mount=type=cache,target=/root/.gradle \
+    chmod +x ./gradlew && ./gradlew clean bootJar --no-daemon -x test
 
 # ---------- runtime stage ----------
 FROM eclipse-temurin:21-jre AS runtime
