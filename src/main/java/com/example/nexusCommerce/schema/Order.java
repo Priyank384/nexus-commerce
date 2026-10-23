@@ -2,8 +2,10 @@ package com.example.nexusCommerce.schema;
 
 import java.time.LocalDateTime;
 
+import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
+import org.hibernate.type.SqlTypes;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -36,6 +38,11 @@ public class Order extends BaseEntity{
     @ManyToOne (fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    // V20's JSON column, written once at checkout and never touched again.
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "address_snapshot")
+    private AddressSnapshot addressSnapshot;
 
     private OrderStatus status;
 

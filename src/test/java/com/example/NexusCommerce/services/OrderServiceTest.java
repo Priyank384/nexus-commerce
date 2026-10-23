@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,13 +35,17 @@ import com.example.nexusCommerce.dtos.OrderItemActionDto;
 import com.example.nexusCommerce.dtos.OrderItemRequestDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
+import com.example.nexusCommerce.repositories.AddressRepository;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
+import com.example.nexusCommerce.schema.Address;
+import com.example.nexusCommerce.schema.AddressSnapshot;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderItemAction;
 import com.example.nexusCommerce.schema.OrderProducts;
@@ -69,6 +75,9 @@ class OrderServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private AddressRepository addressRepository;
 
     // Stock reservation now happens on the variant, so the rule that picks one is exercised
     // by VariantResolverTest; here it is stubbed to keep this class about order semantics.
@@ -128,6 +137,21 @@ class OrderServiceTest {
         User user = User.builder().name("Test User").email("test@example.com").build();
         user.setId(1L);
         return user;
+    }
+
+    private Address sampleAddress(Long userId) {
+        Address address = Address.builder()
+                .recipientName("Asha Rao")
+                .phone("+91 98765 43210")
+                .line1("14 Lavelle Road")
+                .line2("Flat 3B")
+                .city("Bengaluru")
+                .state("Karnataka")
+                .postalCode("560001")
+                .country("IN")
+                .build();
+        address.setUserId(userId);
+        return address;
     }
 
     @Test
@@ -302,6 +326,64 @@ class OrderServiceTest {
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(captor.capture());
         assertEquals(user, captor.getValue().getUser());
+        assertNull(captor.getValue().getAddressSnapshot(), "no addressId means no snapshot");
+    }
+
+    @Test
+    void createOrder_snapshotsTheShippingAddress() {
+        Address address = sampleAddress(1L);
+        CreateOrderRequestDto dto = CreateOrderRequestDto.builder()
+                .orderItems(List.of(OrderItemRequestDto.builder().productId(1L).quantity(1).build()))
+                .addressId(7L)
+                .build();
+        GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
+        when(addressRepository.findById(7L)).thenReturn(Optional.of(address));
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
+        when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(sampleProduct()));
+        when(variantRepository.decrementStock(11L, 1)).thenReturn(1);
+        givenSingleVariantStock(9);
+        when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
+
+        orderService.createOrder(dto, 1L);
+
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(captor.capture());
+        AddressSnapshot snapshot = captor.getValue().getAddressSnapshot();
+        assertNotNull(snapshot);
+        assertEquals("Asha Rao", snapshot.getRecipientName());
+        assertEquals("14 Lavelle Road", snapshot.getLine1());
+        assertEquals("560001", snapshot.getPostalCode());
+        assertEquals("IN", snapshot.getCountry());
+    }
+
+    @Test
+    void createOrder_rejectsAnAddressOwnedByAnotherUser() {
+        CreateOrderRequestDto dto = CreateOrderRequestDto.builder()
+                .orderItems(List.of(OrderItemRequestDto.builder().productId(1L).quantity(1).build()))
+                .addressId(7L)
+                .build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
+        when(addressRepository.findById(7L)).thenReturn(Optional.of(sampleAddress(2L)));
+
+        assertThrows(ForbiddenException.class, () -> orderService.createOrder(dto, 1L));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_whenAddressNotFound_throwsResourceNotFoundException() {
+        CreateOrderRequestDto dto = CreateOrderRequestDto.builder()
+                .orderItems(List.of(OrderItemRequestDto.builder().productId(1L).quantity(1).build()))
+                .addressId(404L)
+                .build();
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
+        when(addressRepository.findById(404L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, 1L));
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test

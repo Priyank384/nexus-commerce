@@ -7,8 +7,10 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
+import com.example.nexusCommerce.dtos.GetOrderAddressResponseDto;
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
+import com.example.nexusCommerce.schema.AddressSnapshot;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 
@@ -32,9 +34,26 @@ public class OrderAdapter {
                 .totalPrice(totalOf(orderProducts))
                 .paymentStatus(order.getPaymentStatus())
                 .paidAt(order.getPaidAt())
+                .address(addressOf(order.getAddressSnapshot()))
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .items(mapToOrderItemResponseDto(orderProducts))
+                .build();
+    }
+
+    private static GetOrderAddressResponseDto addressOf(AddressSnapshot snapshot) {
+        if (snapshot == null) {
+            return null;
+        }
+        return GetOrderAddressResponseDto.builder()
+                .recipientName(snapshot.getRecipientName())
+                .phone(snapshot.getPhone())
+                .line1(snapshot.getLine1())
+                .line2(snapshot.getLine2())
+                .city(snapshot.getCity())
+                .state(snapshot.getState())
+                .postalCode(snapshot.getPostalCode())
+                .country(snapshot.getCountry())
                 .build();
     }
 

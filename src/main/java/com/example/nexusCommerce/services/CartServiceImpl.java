@@ -112,6 +112,12 @@ public class CartServiceImpl implements CartService {
         if (cart.getItems().isEmpty()) {
             throw new InvalidRequestException("Cart is empty");
         }
+        // An order without a destination cannot be fulfilled, so checkout refuses rather than
+        // silently placing one with a null snapshot.
+        Long addressId = override == null ? null : override.getAddressId();
+        if (addressId == null) {
+            throw new InvalidRequestException("A shipping address is required to place an order");
+        }
         List<OrderItemRequestDto> items = (override != null && override.getOrderItems() != null
                 && !override.getOrderItems().isEmpty())
                 ? override.getOrderItems()
@@ -126,6 +132,7 @@ public class CartServiceImpl implements CartService {
                         .toList();
         CreateOrderRequestDto request = new CreateOrderRequestDto();
         request.setOrderItems(items);
+        request.setAddressId(addressId);
         GetOrderResponseDto order = orderService.createOrder(request, userId);
         cart.getItems().clear();
         cartRepository.save(cart);

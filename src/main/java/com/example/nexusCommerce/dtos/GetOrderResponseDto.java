@@ -26,6 +26,8 @@ public class GetOrderResponseDto {
     private BigDecimal totalPrice;
     private PaymentStatus paymentStatus;
     private LocalDateTime paidAt;
+    /** Null for orders placed before addresses were captured. */
+    private GetOrderAddressResponseDto address;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponseDto> items;

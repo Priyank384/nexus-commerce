@@ -6,7 +6,9 @@ import static com.example.nexusCommerce.configs.CacheConfig.ORDER_SUMMARY;
 import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_ALL;
 import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_BY_CATEGORY;
 import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_BY_ID;
+import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_BY_SLUG;
 import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_DETAILS;
+import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_SEARCH;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -32,13 +34,17 @@ import com.example.nexusCommerce.dtos.OrderItemActionDto;
 import com.example.nexusCommerce.dtos.OrderItemRequestDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
+import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
+import com.example.nexusCommerce.repositories.AddressRepository;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ProductVariantRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
+import com.example.nexusCommerce.schema.Address;
+import com.example.nexusCommerce.schema.AddressSnapshot;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
@@ -60,6 +66,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository variantRepository;
     private final UserRepository userRepository;
+    private final AddressRepository addressRepository;
     private final VariantResolver variantResolver;
     private final org.springframework.context.ApplicationEventPublisher events;
 
@@ -111,7 +118,7 @@ public class OrderServiceImpl implements OrderService {
     @Caching(evict = {
             @CacheEvict(cacheNames = ORDER_ALL, allEntries = true),
             @CacheEvict(cacheNames = { ORDER_BY_ID, ORDER_SUMMARY }, key = "#id"),
-            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY }, allEntries = true)
+            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true)
     })
     @Override
     public void deleteOrder(Long id){
@@ -134,7 +141,7 @@ public class OrderServiceImpl implements OrderService {
     @Caching(evict = {
             @CacheEvict(cacheNames = { ORDER_ALL, ORDER_BY_ID, ORDER_SUMMARY }, allEntries = true),
             // Stock changed: the product read model must not serve a stale count.
-            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY }, allEntries = true)
+            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true)
     })
     @Override
     public GetOrderResponseDto createOrder(CreateOrderRequestDto createOrderRequestDto, Long authenticatedUserId){
@@ -147,6 +154,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = Order.builder()
                         .status(OrderStatus.PENDING)
                         .user(user)
+                        .addressSnapshot(snapshotOf(createOrderRequestDto.getAddressId(), authenticatedUserId))
                         .build();
 
         orderRepository.save(order);
@@ -203,7 +211,7 @@ public class OrderServiceImpl implements OrderService {
     @Caching(evict = {
             @CacheEvict(cacheNames = ORDER_ALL, allEntries = true),
             @CacheEvict(cacheNames = { ORDER_BY_ID, ORDER_SUMMARY }, key = "#id"),
-            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY }, allEntries = true)
+            @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true)
     })
     @Override
     public GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto){
@@ -414,6 +422,22 @@ public class OrderServiceImpl implements OrderService {
             throw new InvalidRequestException(
                     "Order " + order.getId() + " is " + order.getStatus() + " and can no longer be modified");
         }
+    }
+
+    /**
+     * The order keeps its own copy: the address book entry it pointed at may be edited or
+     * deleted later, and neither may change where a placed order was sent.
+     */
+    private AddressSnapshot snapshotOf(Long addressId, Long userId) {
+        if (addressId == null) {
+            return null;
+        }
+        Address address = addressRepository.findById(addressId)
+                .orElseThrow(() -> new ResourceNotFoundException("Address with id: " + addressId + " Not Found!"));
+        if (!userId.equals(address.getUserId())) {
+            throw new ForbiddenException("Address " + addressId + " does not belong to user " + userId);
+        }
+        return AddressSnapshot.from(address);
     }
 
     /**
