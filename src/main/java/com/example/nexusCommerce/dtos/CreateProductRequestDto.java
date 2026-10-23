@@ -44,9 +44,9 @@ public class CreateProductRequestDto {
     @Positive(message = "Category id must be positive")
     private Long categoryId;
 
-    @NotNull(message = "Product rating must not be null")
-    @DecimalMin(value = "0", message = "Product rating must be between 0 and 10")
-    @DecimalMax(value = "10", message = "Product rating must be between 0 and 10")
+    /** Derived from reviews once they exist; omitted means "no rating yet". */
+    @DecimalMin(value = "0", message = "Product rating must be between 0 and 5")
+    @DecimalMax(value = "5", message = "Product rating must be between 0 and 5")
     private BigDecimal rating;
 
     @PositiveOrZero(message = "Stock must not be negative")

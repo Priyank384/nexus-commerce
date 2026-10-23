@@ -258,7 +258,7 @@ public class ProductServiceImpl implements ProductService {
                             .image(requestDto.getImage())
                             .price(requestDto.getPrice())
                             .compareAtPrice(requestDto.getCompareAtPrice())
-                            .rating(requestDto.getRating())
+                            .rating(requestDto.getRating() == null ? BigDecimal.ZERO : requestDto.getRating())
                             // Variant stock is the truth once variants exist, so the legacy
                             // aggregate has to start as its sum rather than the request value.
                             .stock(variants.isEmpty()
@@ -376,8 +376,8 @@ public class ProductServiceImpl implements ProductService {
             product.setImage(requestDto.getImage());
         }
         if (requestDto.getRating() != null) {
-            if (requestDto.getRating().signum() < 0 || requestDto.getRating().compareTo(BigDecimal.TEN) > 0) {
-                throw new InvalidRequestException("Product rating must be between 0 and 10!");
+            if (requestDto.getRating().signum() < 0 || requestDto.getRating().compareTo(BigDecimal.valueOf(5)) > 0) {
+                throw new InvalidRequestException("Product rating must be between 0 and 5!");
             }
             product.setRating(requestDto.getRating());
         }

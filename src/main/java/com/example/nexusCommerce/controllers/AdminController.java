@@ -1,6 +1,9 @@
 package com.example.nexusCommerce.controllers;
 
+import java.util.List;
+
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -11,8 +14,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.nexusCommerce.dtos.AdminMetricsResponseDto;
+import com.example.nexusCommerce.dtos.GetProductImageResponseDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
+import com.example.nexusCommerce.dtos.ReorderProductImagesRequestDto;
 import com.example.nexusCommerce.dtos.SetStockRequestDto;
 import com.example.nexusCommerce.dtos.UpdateUserRequestDto;
 import com.example.nexusCommerce.services.AdminService;
@@ -53,8 +58,9 @@ public class AdminController {
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<PageResponse<GetUserResponseDto>>> listUsers(
             @RequestParam(name = "page", defaultValue = "0") int page,
-            @RequestParam(name = "size", defaultValue = "20") int size) {
-        PageResponse<GetUserResponseDto> users = adminService.listUsers(page, Pagination.clampSize(size));
+            @RequestParam(name = "size", defaultValue = "20") int size,
+            @RequestParam(name = "q", required = false) String q) {
+        PageResponse<GetUserResponseDto> users = adminService.listUsers(page, Pagination.clampSize(size), q);
         return ResponseEntity.ok(ApiResponse.success(users, "Users fetched successfully"));
     }
 
@@ -94,5 +100,35 @@ public class AdminController {
             @PathVariable Long id, @RequestParam("file") MultipartFile file) {
         String url = imageUploadService.upload(id, file);
         return ResponseEntity.ok(ApiResponse.success(url, "Image uploaded"));
+    }
+
+    @Operation(summary = "Append a gallery image",
+               description = "Stores a PNG/JPEG/WebP up to 5 MB and appends it to the product's gallery "
+                             + "after the current last position. Requires ROLE_ADMIN.")
+    @PostMapping("/products/{id}/images")
+    public ResponseEntity<ApiResponse<GetProductImageResponseDto>> appendGalleryImage(
+            @PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.success(
+                imageUploadService.appendGalleryImage(id, file), "Image added to gallery"));
+    }
+
+    @Operation(summary = "Delete a gallery image",
+               description = "Soft-deletes the row, closes the position gap and returns the remaining "
+                             + "gallery in order. The file stays on disk so order snapshots keep resolving. Requires ROLE_ADMIN.")
+    @DeleteMapping("/products/{id}/images/{imageId}")
+    public ResponseEntity<ApiResponse<List<GetProductImageResponseDto>>> deleteGalleryImage(
+            @PathVariable Long id, @PathVariable Long imageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                imageUploadService.deleteGalleryImage(id, imageId), "Image removed from gallery"));
+    }
+
+    @Operation(summary = "Reorder the gallery",
+               description = "Body lists every live image id exactly once, in the new display order. "
+                             + "Position 0 becomes the thumbnail. Requires ROLE_ADMIN.")
+    @PutMapping("/products/{id}/images/order")
+    public ResponseEntity<ApiResponse<List<GetProductImageResponseDto>>> reorderGallery(
+            @PathVariable Long id, @Valid @RequestBody ReorderProductImagesRequestDto requestDto) {
+        return ResponseEntity.ok(ApiResponse.success(
+                imageUploadService.reorderGallery(id, requestDto.getImageIds()), "Gallery reordered"));
     }
 }

@@ -63,9 +63,13 @@ public class AdminServiceImpl implements AdminService {
 
     @Transactional(readOnly = true)
     @Override
-    public PageResponse<GetUserResponseDto> listUsers(int page, int size) {
-        return PageResponse.of(userRepository.findAll(Pagination.of(page, size)),
-                userAdapter::mapToGetUserResponseDto);
+    public PageResponse<GetUserResponseDto> listUsers(int page, int size, String q) {
+        var pageable = Pagination.of(page, size);
+        var users = q == null || q.isBlank()
+                ? userRepository.findAll(pageable)
+                : userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+                        q.trim(), q.trim(), pageable);
+        return PageResponse.of(users, userAdapter::mapToGetUserResponseDto);
     }
 
     @Transactional(readOnly = true)

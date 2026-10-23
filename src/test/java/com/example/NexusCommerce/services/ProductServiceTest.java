@@ -230,6 +230,15 @@ class ProductServiceTest {
     }
 
     @Test
+    void updateProduct_rejectsARatingAboveTheFiveStarScale() {
+        Product product = sampleProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        assertThrows(InvalidRequestException.class, () -> productService.updateProduct(1L,
+                UpdateProductRequestDto.builder().rating(BigDecimal.valueOf(5.1)).build()));
+    }
+
+    @Test
     void createProduct_compareAtBelowPriceIsRejected() {
         Category category = Category.builder().name("Electronics").build();
         category.setId(1L);

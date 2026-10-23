@@ -2,6 +2,8 @@ package com.example.nexusCommerce.repositories;
 
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -19,4 +21,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRole(Role role);
 
     long countByRoleAndEnabledTrue(Role role);
+
+    // Admin user search matches either identity field; both columns are small enough that a
+    // contains-scan on a paged admin screen is cheaper than another index.
+    Page<User> findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(
+            String name, String email, Pageable pageable);
 }
