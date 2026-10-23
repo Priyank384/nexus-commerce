@@ -32,8 +32,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // Serve uploaded product images back over HTTP from the local store. In prod,
-        // swap this for a CDN or S3 by replacing the resource location here.
+        // Serves images written by LocalImageStorage. When STORAGE_TYPE=s3 the product
+        // rows point straight at the bucket, so this handler simply goes unused.
         String location = Paths.get(uploadDir).toAbsolutePath().normalize().toUri().toString();
         registry.addResourceHandler("/uploads/products/**")
                 .addResourceLocations(location);

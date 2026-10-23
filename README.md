@@ -114,13 +114,22 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | `DB_USER` / `DB_PASSWORD` | fall back to `username` / `password` | DB credentials |
 | `DB_DRIVER` | `com.mysql.cj.jdbc.Driver` | Set to `org.postgresql.Driver` for PostgreSQL |
 | `FLYWAY_LOCATIONS` | `classpath:db/migration` | Set to `classpath:db/migration-postgres` to match the DB above |
-| `redis_port` | `6379` | Redis port (host defaults to `localhost`) |
+| `REDIS_URL` | empty | Full `rediss://user:pass@host:6379` URL; takes precedence over the parts below |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `redis_port` (`6379`) | Redis endpoint; `REDIS_PORT` supersedes the legacy `redis_port` |
+| `REDIS_USERNAME` / `REDIS_PASSWORD` | empty | AUTH for managed Redis (Upstash uses `default`) |
+| `REDIS_SSL` | `false` | Enable TLS for managed Redis when using host/port rather than a URL |
+| `REDIS_CONNECT_TIMEOUT` | `2s` | Connect budget; a managed TLS endpoint pays a handshake on cold connections |
+| `DB_POOL_SIZE` | `20` | Hikari maximum pool size; lower it on managed free tiers |
 | `JWT_SECRET` | dev-only string in yml | HMAC signing secret, **≥ 32 bytes** — always override outside local dev |
 | `JWT_EXPIRATION_MINUTES` | `120` | Access-token lifetime |
 | `JWT_REFRESH_EXPIRATION_DAYS` | `7` | Refresh-token TTL in Redis |
 | `LOGIN_RATE_MAX` | `10` | Login attempts per window (per client IP) |
 | `LOGIN_RATE_WINDOW_SECONDS` | `60` | Window length for the login rate limiter |
-| `UPLOAD_DIR` | `uploads/products` | Local filesystem directory for product image uploads; mount a volume in Docker |
+| `UPLOAD_DIR` | `uploads/products` | Local filesystem directory for uploads when `STORAGE_TYPE=local` |
+| `STORAGE_TYPE` | `local` | `local` writes to disk; `s3` uses the S3-compatible block below (R2) |
+| `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_PUBLIC_BASE_URL` | empty | Required when `STORAGE_TYPE=s3`; the app refuses to boot if any is blank |
+| `S3_REGION` / `S3_KEY_PREFIX` | `auto` / `products` | R2 uses region `auto`; objects live under this key prefix |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:3001` | Browser origins allowed to call the API directly (the BFF itself sends no Origin) |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | empty | Test/live API keys. Empty secret ⇒ every payment write fails loudly rather than settling on a half-configured gateway |
 | `RAZORPAY_WEBHOOK_SECRET` | empty | HMAC secret Razorpay uses to sign webhook bodies |
 | `RAZORPAY_BASE_URL` | `https://api.razorpay.com/v1` | Override for the sandbox or tests |
@@ -216,6 +225,15 @@ RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 3. **Boot smoke test** — MySQL 8.4 and Redis 7 are provided as service containers with healthchecks; the workflow runs `./gradlew --no-daemon bootRun` and polls `http://localhost:3001/actuator/health` up to 120 s. If the process dies early the full `bootrun.log` is printed; if it never becomes healthy the tail is printed.
 
 CI deliberately uses an **empty MySQL password** and a fixed **`ci-only-secret-please-rotate-in-real-deployment-0123456789`** `JWT_SECRET` — those are throwaway values scoped to the ephemeral runner.
+
+---
+
+## Deployment
+
+Production runs the Docker image on **Render**, the storefront on **Vercel**, and uses
+**Aiven PostgreSQL**, **Upstash Redis** and **Cloudflare R2** for state. `render.yaml` is
+the Render Blueprint; the full runbook — env matrix, first-boot admin, Razorpay webhook and
+smoke checklist — is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 

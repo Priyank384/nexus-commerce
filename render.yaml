@@ -1,0 +1,88 @@
+# Render Blueprint for the NexusCommerce API.
+#
+# Create a Blueprint from this file in the Render dashboard and every env var below is
+# created in the service, but left empty ("sync: false"). Fill the real values in the
+# dashboard; nothing secret belongs in this file.
+#
+# The free plan idles after 15 minutes and cold-starts in ~50 s, and its 512 MB heap is
+# tight for Spring Boot. Switch `plan` to `starter` for anything a shopper will hit cold.
+services:
+  - type: web
+    name: nexus-commerce-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    autoDeployTrigger: commit
+    envVars:
+      # --- database: Aiven PostgreSQL (Postgres migration set) ---
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_DRIVER
+        value: org.postgresql.Driver
+      - key: FLYWAY_LOCATIONS
+        value: classpath:db/migration-postgres
+      # Aiven's free plan allows ~20 connections; leave room for Flyway and psql.
+      - key: DB_POOL_SIZE
+        value: "10"
+
+      # --- auth: generate with `openssl rand -base64 48` ---
+      - key: JWT_SECRET
+        sync: false
+
+      # --- cache / refresh tokens / rate limits: Upstash Redis ---
+      # Paste the full rediss:// URL from the Upstash console, port included (":6379").
+      # REDIS_HOST/PORT/USERNAME/PASSWORD/SSL remain supported for providers that do not
+      # issue a single URL; when REDIS_URL is set it takes precedence.
+      - key: REDIS_URL
+        sync: false
+
+      # --- product images: Cloudflare R2 (S3 API) ---
+      - key: STORAGE_TYPE
+        value: s3
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_PUBLIC_BASE_URL
+        sync: false
+      - key: S3_KEY_PREFIX
+        value: products
+
+      # --- payments: Razorpay test mode ---
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
+      # --- browser origins allowed to call the API directly ---
+      # The Vercel URL plus this service's own URL (Swagger UI posts from here).
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+      # --- first boot only: seeds the ADMIN account, then blank both keys ---
+      - key: ADMIN_BOOTSTRAP_EMAIL
+        sync: false
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        sync: false
+      - key: ADMIN_BOOTSTRAP_NAME
+        sync: false
+
+      # Free-tier JVM sizing: serial GC and a smaller ceiling leave room for the
+      # metaspace + thread stacks inside 512 MB.
+      - key: JAVA_TOOL_OPTIONS
+        value: -XX:+UseSerialGC -XX:MaxRAMPercentage=70

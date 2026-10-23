@@ -8,25 +8,21 @@ import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_DETAILS;
 import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_SEARCH;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.nexusCommerce.adapters.ProductAdapter;
@@ -37,12 +33,14 @@ import com.example.nexusCommerce.repositories.ProductImageRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductImage;
+import com.example.nexusCommerce.services.storage.ImageStorage;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * Stores product images on the local filesystem under ${app.upload.dir} and serves them as
- * /uploads/products/{file}. Swap the storage path for S3 or similar by replacing this bean.
+ * Validates uploads and hands the bytes to the configured {@link ImageStorage} (local disk
+ * by default, S3/R2 when STORAGE_TYPE=s3). The URL it returns is persisted verbatim on the
+ * product and gallery rows.
  *
  * <p>V17 keeps one live row per (product, position), so reindexing moves every row to a
  * negative placeholder position and flushes before assigning the final 0..n-1 order. A
@@ -58,22 +56,22 @@ public class ProductImageUploadService {
     private final ProductRepository productRepository;
     private final ProductImageRepository imageRepository;
     private final ProductAdapter productAdapter;
-
-    @Value("${app.upload.dir:uploads/products}")
-    private String uploadDir;
+    private final ImageStorage imageStorage;
 
     @Transactional
     @Caching(evict = { @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG,
             PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true) })
     public String upload(Long productId, MultipartFile file) {
         Product product = loadProduct(productId);
+        String previousImage = product.getImage();
         String url = store(file);
         product.setImage(url);
         productRepository.save(product);
 
         // products.image is the historic mirror of position 0, so the gallery's first row
         // must follow it or the card and the PDP would disagree about the primary image.
-        ProductImage primary = imageRepository.findByProductIdOrderByPositionAsc(productId).stream()
+        List<ProductImage> gallery = imageRepository.findByProductIdOrderByPositionAsc(productId);
+        ProductImage primary = gallery.stream()
                 .filter(image -> image.getPosition() == 0)
                 .findFirst()
                 .orElse(null);
@@ -83,6 +81,13 @@ public class ProductImageUploadService {
         } else {
             primary.setUrl(url);
             imageRepository.save(primary);
+        }
+        // A gallery row may still point at the image the thumbnail was mirrored from; only
+        // drop the object once nothing in this product references it any more.
+        boolean stillReferenced = gallery.stream()
+                .anyMatch(image -> Objects.equals(previousImage, image.getUrl()));
+        if (!stillReferenced) {
+            deleteAfterCommit(previousImage);
         }
         return url;
     }
@@ -113,6 +118,7 @@ public class ProductImageUploadService {
         ProductImage image = imageRepository.findByIdAndProductId(imageId, productId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Image " + imageId + " not found on product " + productId));
+        String removedUrl = image.getUrl();
         imageRepository.delete(image);
         // The soft-delete UPDATE must land before reindexing, otherwise the row still holds
         // its old live_position and the replacement collides with the unique index.
@@ -120,6 +126,9 @@ public class ProductImageUploadService {
         List<ProductImage> remaining = imageRepository.findByProductIdOrderByPositionAsc(productId);
         reindex(remaining);
         syncThumbnail(product, remaining);
+        // Only after the row is gone and the thumbnail has moved on; the storage adapter
+        // ignores URLs it does not own (seeded picsum links, for example).
+        deleteAfterCommit(removedUrl);
         return productAdapter.mapToGetProductImageResponseDtoList(remaining);
     }
 
@@ -142,6 +151,24 @@ public class ProductImageUploadService {
         reindex(ordered);
         syncThumbnail(product, ordered);
         return productAdapter.mapToGetProductImageResponseDtoList(ordered);
+    }
+
+    /**
+     * Removing the object inside the transaction would leave a surviving row pointing at a
+     * missing file if the soft delete later rolls back, so wait for the commit.
+     */
+    private void deleteAfterCommit(String url) {
+        if (url == null) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    imageStorage.delete(url);
+                }
+            });
+        } else {
+            imageStorage.delete(url);
+        }
     }
 
     private void reindex(List<ProductImage> imagesInOrder) {
@@ -177,18 +204,11 @@ public class ProductImageUploadService {
         if (!ALLOWED.contains(contentType)) {
             throw new InvalidRequestException("only PNG, JPEG and WebP images are accepted");
         }
-        String filename = UUID.randomUUID() + extension(contentType);
-        Path dir = Paths.get(uploadDir).toAbsolutePath().normalize();
         try {
-            Files.createDirectories(dir);
-            Path target = dir.resolve(filename);
-            try (var in = file.getInputStream()) {
-                Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-            }
+            return imageStorage.store(file.getBytes(), extension(contentType), contentType);
         } catch (IOException e) {
-            throw new InvalidRequestException("failed to store image: " + e.getMessage());
+            throw new InvalidRequestException("failed to read uploaded image: " + e.getMessage());
         }
-        return "/uploads/products/" + filename;
     }
 
     private static String extension(String contentType) {

@@ -5,25 +5,24 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.example.nexusCommerce.adapters.ProductAdapter;
 import com.example.nexusCommerce.dtos.GetProductImageResponseDto;
@@ -33,6 +32,7 @@ import com.example.nexusCommerce.repositories.ProductImageRepository;
 import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductImage;
+import com.example.nexusCommerce.services.storage.ImageStorage;
 
 @ExtendWith(MockitoExtension.class)
 class ProductImageUploadServiceTest {
@@ -46,16 +46,11 @@ class ProductImageUploadServiceTest {
     @Spy
     private ProductAdapter productAdapter = new ProductAdapter();
 
+    @Mock
+    private ImageStorage imageStorage;
+
     @InjectMocks
     private ProductImageUploadService service;
-
-    @TempDir
-    Path uploadDir;
-
-    @BeforeEach
-    void pointStorageAtTempDir() {
-        ReflectionTestUtils.setField(service, "uploadDir", uploadDir.toString());
-    }
 
     private static Product product() {
         Product product = Product.builder().title("Pleated Trouser").image("/uploads/products/old.png").build();
@@ -79,17 +74,16 @@ class ProductImageUploadServiceTest {
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
         when(imageRepository.findByProductIdOrderByPositionAsc(42L)).thenReturn(List.of());
         when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), eq(".png"), eq("image/png")))
+                .thenReturn("/uploads/products/new.png");
 
         String url = service.upload(42L, png());
 
-        assertTrue(url.startsWith("/uploads/products/"));
-        assertTrue(url.endsWith(".png"));
+        assertEquals("/uploads/products/new.png", url);
         assertEquals(url, product.getImage());
+        verify(imageStorage).store(any(), eq(".png"), eq("image/png"));
         verify(productRepository).save(product);
         verify(imageRepository).save(any(ProductImage.class));
-        try (var files = Files.list(uploadDir)) {
-            assertEquals(1, files.count());
-        }
     }
 
     @Test
@@ -99,6 +93,8 @@ class ProductImageUploadServiceTest {
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
         when(imageRepository.findByProductIdOrderByPositionAsc(42L)).thenReturn(List.of(primary));
         when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), anyString(), anyString()))
+                .thenReturn("/uploads/products/new.png");
 
         String url = service.upload(42L, png());
 
@@ -113,7 +109,40 @@ class ProductImageUploadServiceTest {
         MockMultipartFile gif = new MockMultipartFile("file", "x.gif", "image/gif", new byte[] {1});
 
         assertThrows(InvalidRequestException.class, () -> service.upload(42L, gif));
+        verify(imageStorage, never()).store(any(), anyString(), anyString());
         verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void upload_dropsTheReplacedObjectAfterTheRowsStopPointingAtIt() {
+        Product product = product();
+        ProductImage primary = image(1L, "/uploads/products/old.png", 0);
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        when(imageRepository.findByProductIdOrderByPositionAsc(42L)).thenReturn(List.of(primary));
+        when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), anyString(), anyString()))
+                .thenReturn("/uploads/products/new.png");
+
+        service.upload(42L, png());
+
+        verify(imageStorage).delete("/uploads/products/old.png");
+    }
+
+    @Test
+    void upload_keepsTheReplacedObjectWhileAnotherGalleryRowStillUsesIt() {
+        Product product = product();
+        ProductImage primary = image(1L, "/uploads/products/old.png", 0);
+        ProductImage duplicate = image(2L, "/uploads/products/old.png", 1);
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        when(imageRepository.findByProductIdOrderByPositionAsc(42L))
+                .thenReturn(List.of(primary, duplicate));
+        when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), anyString(), anyString()))
+                .thenReturn("/uploads/products/new.png");
+
+        service.upload(42L, png());
+
+        verify(imageStorage, never()).delete(anyString());
     }
 
     @Test
@@ -127,10 +156,12 @@ class ProductImageUploadServiceTest {
             saved.setId(9L);
             return saved;
         });
+        when(imageStorage.store(any(), anyString(), anyString())).thenReturn("/uploads/products/new.png");
 
         GetProductImageResponseDto dto = service.appendGalleryImage(42L, png());
 
         assertEquals(9L, dto.getId());
+        assertEquals("/uploads/products/new.png", dto.getUrl());
         assertEquals(4, dto.getPosition());
         assertEquals("/uploads/products/old.png", product.getImage(), "existing thumbnail is untouched");
         verify(productRepository, never()).save(any());
@@ -143,6 +174,7 @@ class ProductImageUploadServiceTest {
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
         when(imageRepository.findTopByProductIdOrderByPositionDesc(42L)).thenReturn(Optional.empty());
         when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), anyString(), anyString())).thenReturn("/uploads/products/new.png");
 
         GetProductImageResponseDto dto = service.appendGalleryImage(42L, png());
 
@@ -169,6 +201,30 @@ class ProductImageUploadServiceTest {
         assertEquals(1, third.getPosition());
         assertEquals("/b.png", product.getImage());
         verify(productRepository).save(product);
+        verify(imageStorage).delete("/a.png");
+    }
+
+    @Test
+    void deleteGalleryImage_waitsForTheCommitBeforeRemovingTheObject() {
+        Product product = product();
+        ProductImage removed = image(1L, "/uploads/products/gone.png", 0);
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        when(imageRepository.findByIdAndProductId(1L, 42L)).thenReturn(Optional.of(removed));
+        when(imageRepository.findByProductIdOrderByPositionAsc(42L)).thenReturn(List.of());
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            service.deleteGalleryImage(42L, 1L);
+
+            // A rollback between here and commit would have deleted an object the row
+            // still points at, so the delete is held until the transaction succeeds.
+            verify(imageStorage, never()).delete("/uploads/products/gone.png");
+            TransactionSynchronizationManager.getSynchronizations()
+                    .forEach(TransactionSynchronization::afterCommit);
+            verify(imageStorage).delete("/uploads/products/gone.png");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

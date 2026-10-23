@@ -56,6 +56,12 @@ dependencies {
 	// Observability: HTTP health/info/metrics/prometheus endpoints, gated behind ROLE_ADMIN.
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
+	// S3-compatible object storage for product images (Cloudflare R2 in production).
+	// The BOM aligns every module version; apache-client is the synchronous transport.
+	implementation platform('software.amazon.awssdk:bom:2.57.3')
+	implementation 'software.amazon.awssdk:s3'
+	implementation 'software.amazon.awssdk:apache-client'
 }
 
 tasks.named('test') {

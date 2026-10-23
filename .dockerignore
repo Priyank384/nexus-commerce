@@ -1,0 +1,12 @@
+# Never ship local state or secrets into the build context.
+.git
+.gradle
+build
+.env
+.env.*
+!.env.example
+uploads
+newrelic
+*.log
+.DS_Store
+.vscode
