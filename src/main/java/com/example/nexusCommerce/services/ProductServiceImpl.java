@@ -249,6 +249,7 @@ public class ProductServiceImpl implements ProductService {
 
         List<ProductVariant> variants = toVariants(requestDto);
         List<ProductImage> images = toImages(requestDto);
+        requireCompareAtAbovePrice(requestDto.getPrice(), requestDto.getCompareAtPrice());
 
         Product newProduct = Product.builder()
                             .title(requestDto.getTitle().trim())
@@ -368,6 +369,9 @@ public class ProductServiceImpl implements ProductService {
             }
             product.setCompareAtPrice(requestDto.getCompareAtPrice());
         }
+        // Checked against the merged state: a price-only or compare-at-only PUT omits the other
+        // half, and reading the pair off the request would NPE or validate a stale value.
+        requireCompareAtAbovePrice(product.getPrice(), product.getCompareAtPrice());
         if (requestDto.getImage() != null) {
             product.setImage(requestDto.getImage());
         }
@@ -413,6 +417,19 @@ public class ProductServiceImpl implements ProductService {
         }
 
         return productAdapter.mapToGetProductResponseDto(productRepository.save(product));
+    }
+
+    /**
+     * compare_at_price is the "was" figure the storefront strikes through, so a value at or below
+     * the sale price is either a typo or a fake discount. Both writers enforce it from one place.
+     */
+    private void requireCompareAtAbovePrice(BigDecimal price, BigDecimal compareAtPrice) {
+        if (compareAtPrice == null) {
+            return;
+        }
+        if (price == null || compareAtPrice.compareTo(price) <= 0) {
+            throw new InvalidRequestException("Compare-at price must be greater than price!");
+        }
     }
 
     /**

@@ -28,6 +28,7 @@ import com.example.nexusCommerce.adapters.ProductAdapter;
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
+import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
@@ -200,6 +201,49 @@ class ProductServiceTest {
         when(categoryRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> productService.createProduct(dto));
+    }
+
+    @Test
+    void updateProduct_priceOnlyKeepsTheExistingCompareAt() {
+        Product product = sampleProduct();
+        product.setCompareAtPrice(BigDecimal.valueOf(90000));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+
+        productService.updateProduct(1L, UpdateProductRequestDto.builder()
+                .price(BigDecimal.valueOf(70000))
+                .build());
+
+        assertEquals(BigDecimal.valueOf(70000), product.getPrice());
+        assertEquals(BigDecimal.valueOf(90000), product.getCompareAtPrice());
+    }
+
+    @Test
+    void updateProduct_compareAtBelowTheMergedPriceIsRejected() {
+        Product product = sampleProduct();
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+
+        // Only compare-at comes in, so the rule has to be checked against the price already on
+        // the row — reading the pair off the request used to NPE here instead.
+        assertThrows(InvalidRequestException.class, () -> productService.updateProduct(1L,
+                UpdateProductRequestDto.builder().compareAtPrice(BigDecimal.valueOf(60000)).build()));
+    }
+
+    @Test
+    void createProduct_compareAtBelowPriceIsRejected() {
+        Category category = Category.builder().name("Electronics").build();
+        category.setId(1L);
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(category));
+        when(productRepository.existsByTitleIgnoreCase("iPhone")).thenReturn(false);
+
+        assertThrows(InvalidRequestException.class, () -> productService.createProduct(
+                CreateProductRequestDto.builder()
+                        .title("iPhone")
+                        .price(BigDecimal.valueOf(80000))
+                        .compareAtPrice(BigDecimal.valueOf(70000))
+                        .rating(BigDecimal.valueOf(4.5))
+                        .categoryId(1L)
+                        .build()));
     }
 
     @Test
