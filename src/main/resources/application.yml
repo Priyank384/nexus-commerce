@@ -5,7 +5,7 @@ spring:
     name: NexusCommerce
   datasource:
     # Every value below keeps the historical local-MySQL setup as its default, so booting
-    # without a DB_* override is byte-identical to before. Pointing at PostgreSQL (Aiven)
+    # without a DB_* override is byte-identical to before. Pointing at PostgreSQL (Supabase)
     # is a .env change only: DB_URL, DB_USER, DB_PASSWORD, DB_DRIVER, FLYWAY_LOCATIONS.
     url: ${DB_URL:jdbc:mysql://localhost:3306/nexuscommerce?useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true}
     username: ${DB_USER:${username}}
@@ -14,11 +14,17 @@ spring:
     hikari:
       # Default of 10 was saturating under concurrent cached requests, and a longer
       # checkout wait turns saturation into visible latency spikes.
-      # Managed free-tier databases cap total connections (Aiven: ~20), so the pool size
-      # is overridable — leave headroom for Flyway and psql sessions.
+      # Managed free-tier databases cap total connections, so the pool size is
+      # overridable — leave headroom for Flyway and psql sessions.
       maximum-pool-size: ${DB_POOL_SIZE:20}
-      minimum-idle: 5
+      # Poolers (Supavisor, PgBouncer) drop sessions that sit idle. Parking the default
+      # five idle connections just produces "This connection has been closed" churn and
+      # can wedge a long migration, so idle count is tunable and defaults low.
+      minimum-idle: ${DB_MIN_IDLE:5}
       connection-timeout: 3000
+      keepalive-time: 30000
+      # Below the typical pooler idle timeout, so connections are recycled by us first.
+      max-lifetime: 300000
       pool-name: nexus-pool
   jpa:
     # Requests must not hold a connection (and therefore a transaction) open while the
@@ -68,7 +74,10 @@ spring:
       # hangs, so the deadline has to be explicit. Connect gets a looser budget because a
       # managed TLS endpoint needs a handshake on every cold connection.
       connect-timeout: ${REDIS_CONNECT_TIMEOUT:2s}
-      timeout: 500ms
+      # Lettuce applies this same deadline to connection initialisation (TLS handshake
+      # included), not just to commands. A managed Redis on another continent needs
+      # more than the local-dev 500ms, so it is overridable.
+      timeout: ${REDIS_TIMEOUT:500ms}
 server:
   port: ${PORT}
   # Let in-flight requests finish on SIGTERM before the JVM exits; combined with the
@@ -104,7 +113,7 @@ app:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001}
   storage:
     # local (default) writes under app.upload.dir; s3 talks to any S3-compatible store,
-    # including Cloudflare R2. Both return an absolute or /uploads-relative public URL.
+    # including Supabase Storage. Both return an absolute or /uploads-relative public URL.
     type: ${STORAGE_TYPE:local}
     s3:
       endpoint: ${S3_ENDPOINT:}
@@ -112,7 +121,7 @@ app:
       bucket: ${S3_BUCKET:}
       access-key: ${S3_ACCESS_KEY:}
       secret-key: ${S3_SECRET_KEY:}
-      # Public base URL the bucket is served from (the R2 r2.dev domain or a custom host).
+      # Public base URL the bucket is served from (the Supabase public-object URL or a custom host).
       public-base-url: ${S3_PUBLIC_BASE_URL:}
       key-prefix: ${S3_KEY_PREFIX:products}
   jwt:

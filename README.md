@@ -42,7 +42,7 @@ NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("
 | Framework | Spring Boot **4.0.2** |
 | Persistence | Spring Data JPA, Hibernate |
 | Security | **Spring Security** (stateless) + **JWT** (`jjwt`) + BCrypt password hashing + Redis-backed refresh-token store, jti blacklist and login rate limiter |
-| Database | **MySQL** (Connector/J) or **PostgreSQL** (e.g. Aiven) — whichever the `DB_*` env vars point at; no code branch |
+| Database | **MySQL** (Connector/J) or **PostgreSQL** (Supabase, via the Supavisor pooler) — whichever the `DB_*` env vars point at; no code branch |
 | Migrations | **Flyway** — `V1`–`V24`, with a dialect twin per version (`db/migration` MySQL, `db/migration-postgres` PostgreSQL) selected by `FLYWAY_LOCATIONS` |
 | API docs | **springdoc-openapi** 2.8.x (Swagger UI) |
 | Build | **Gradle** (wrapper) |
@@ -92,7 +92,7 @@ NexusCommerce is wired for **production-style visibility** through Actuator + Mi
 ## Prerequisites
 
 - **JDK 21**
-- **MySQL** 8.x (validated against **MySQL 8.4** and **MySQL 9.6**; Flyway logs a compatibility notice above 8.1 but applies cleanly) — **or** **PostgreSQL** 13+ (validated against Aiven's managed PostgreSQL; `sslmode=require` in the URL).
+- **MySQL** 8.x (validated against **MySQL 8.4** and **MySQL 9.6**; Flyway logs a compatibility notice above 8.1 but applies cleanly) — **or** **PostgreSQL** 13+ (validated against Supabase PostgreSQL 17 via the Supavisor session pooler; `sslmode=require` in the URL).
 - A database named **`nexuscommerce`** (or adjust the JDBC URL in configuration).
 - **Redis** reachable at `localhost:6379` (or `redis_port` in `.env`) — used for read-through caching, refresh-token storage, JWT revocation, login rate limiting and idempotency replay.
 - **Razorpay test-mode keys** *(optional)* — only needed for `/payments/**`. Without them the app boots and everything else works; a payment call returns **502** saying the gateway isn't configured.
@@ -119,23 +119,25 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | `REDIS_USERNAME` / `REDIS_PASSWORD` | empty | AUTH for managed Redis (Upstash uses `default`) |
 | `REDIS_SSL` | `false` | Enable TLS for managed Redis when using host/port rather than a URL |
 | `REDIS_CONNECT_TIMEOUT` | `2s` | Connect budget; a managed TLS endpoint pays a handshake on cold connections |
+| `REDIS_TIMEOUT` | `500ms` | Lettuce command **and handshake** deadline — raise it (e.g. `3s`) for a Redis in another region |
 | `DB_POOL_SIZE` | `20` | Hikari maximum pool size; lower it on managed free tiers |
+| `DB_MIN_IDLE` | `5` | Idle connections to keep; set `1` behind a pooler that reaps idle sessions |
 | `JWT_SECRET` | dev-only string in yml | HMAC signing secret, **≥ 32 bytes** — always override outside local dev |
 | `JWT_EXPIRATION_MINUTES` | `120` | Access-token lifetime |
 | `JWT_REFRESH_EXPIRATION_DAYS` | `7` | Refresh-token TTL in Redis |
 | `LOGIN_RATE_MAX` | `10` | Login attempts per window (per client IP) |
 | `LOGIN_RATE_WINDOW_SECONDS` | `60` | Window length for the login rate limiter |
 | `UPLOAD_DIR` | `uploads/products` | Local filesystem directory for uploads when `STORAGE_TYPE=local` |
-| `STORAGE_TYPE` | `local` | `local` writes to disk; `s3` uses the S3-compatible block below (R2) |
+| `STORAGE_TYPE` | `local` | `local` writes to disk; `s3` uses the S3-compatible block below (Supabase Storage) |
 | `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_PUBLIC_BASE_URL` | empty | Required when `STORAGE_TYPE=s3`; the app refuses to boot if any is blank |
-| `S3_REGION` / `S3_KEY_PREFIX` | `auto` / `products` | R2 uses region `auto`; objects live under this key prefix |
+| `S3_REGION` / `S3_KEY_PREFIX` | `auto` / `products` | Supabase uses the project region (e.g. `ap-northeast-1`); objects live under this key prefix |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:3001` | Browser origins allowed to call the API directly (the BFF itself sends no Origin) |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | empty | Test/live API keys. Empty secret ⇒ every payment write fails loudly rather than settling on a half-configured gateway |
 | `RAZORPAY_WEBHOOK_SECRET` | empty | HMAC secret Razorpay uses to sign webhook bodies |
 | `RAZORPAY_BASE_URL` | `https://api.razorpay.com/v1` | Override for the sandbox or tests |
 | `RAZORPAY_CURRENCY` | `INR` | Currency stamped on every intent |
 
-**Never commit real secrets.** `.env` is gitignored; the `newrelic/newrelic.yml` license key is deliberately commented out. Razorpay and Aiven credentials enter **only** through `.env` / env vars.
+**Never commit real secrets.** `.env` is gitignored; the `newrelic/newrelic.yml` license key is deliberately commented out. Razorpay, Supabase and Upstash credentials enter **only** through `.env` / env vars.
 
 ```properties
 # Example .env (do not commit)
@@ -150,12 +152,16 @@ LOGIN_RATE_MAX=10
 LOGIN_RATE_WINDOW_SECONDS=60
 UPLOAD_DIR=uploads/products
 
-# --- PostgreSQL / Aiven instead of MySQL: replace the four DB_* keys above with ---
-# DB_URL=jdbc:postgresql://host:port/defaultdb?sslmode=require
-# DB_USER=avnadmin
+# --- PostgreSQL / Supabase instead of MySQL: replace the four DB_* keys above with ---
+# Use the Supavisor session-pooler host (the direct db.<ref> host is IPv6-only) and the
+# postgres.<project-ref> username; the app owns the schema named in currentSchema.
+# DB_URL=jdbc:postgresql://aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require&currentSchema=nexuscommercedb&connectTimeout=15&socketTimeout=120&tcpKeepAlive=true
+# DB_USER=postgres.<project-ref>
 # DB_PASSWORD=your_db_password
 # DB_DRIVER=org.postgresql.Driver
 # FLYWAY_LOCATIONS=classpath:db/migration-postgres
+# DB_POOL_SIZE=10
+# DB_MIN_IDLE=1
 
 # --- Razorpay (test mode) ---
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxxxx
@@ -189,7 +195,7 @@ RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 
    On first startup, **Flyway** creates and updates tables (migrations `V1`–`V26`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Plain Thread" seed catalogue, wishlists, addresses, the payment columns and review counts).
 
-   To run on **PostgreSQL** instead (validated against Aiven), set the four `DB_*` keys plus `FLYWAY_LOCATIONS=classpath:db/migration-postgres` in `.env` and start the app — no other change is needed. The MySQL set and the PostgreSQL set are edited together; every version has a twin.
+   To run on **PostgreSQL** instead (validated against Supabase), set the `DB_*` keys plus `FLYWAY_LOCATIONS=classpath:db/migration-postgres` in `.env` and start the app — no other change is needed. The MySQL set and the PostgreSQL set are edited together; every version has a twin.
 
 5. **Run tests**:
 
@@ -231,9 +237,9 @@ CI deliberately uses an **empty MySQL password** and a fixed **`ci-only-secret-p
 ## Deployment
 
 Production runs the Docker image on **Render**, the storefront on **Vercel**, and uses
-**Aiven PostgreSQL**, **Upstash Redis** and **Cloudflare R2** for state. `render.yaml` is
-the Render Blueprint; the full runbook — env matrix, first-boot admin, Razorpay webhook and
-smoke checklist — is in [DEPLOYMENT.md](DEPLOYMENT.md).
+**Supabase PostgreSQL**, **Upstash Redis** and **Supabase Storage** for state. `render.yaml`
+is the Render Blueprint; the full runbook — env matrix, first-boot admin, Razorpay webhook
+and smoke checklist — is in [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ---
 
