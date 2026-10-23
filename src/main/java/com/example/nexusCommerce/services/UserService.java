@@ -5,4 +5,6 @@ import com.example.nexusCommerce.dtos.GetUserResponseDto;
 
 public interface UserService {
     GetUserResponseDto createUser(CreateUserRequestDto requestDto);
+
+    GetUserResponseDto getProfile(Long userId);
 }

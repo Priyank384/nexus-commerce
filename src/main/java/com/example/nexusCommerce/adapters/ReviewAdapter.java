@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import com.example.nexusCommerce.dtos.GetReviewResponseDto;
 import com.example.nexusCommerce.schema.BaseEntity;
 import com.example.nexusCommerce.schema.Review;
+import com.example.nexusCommerce.schema.User;
 
 @Component
 public class ReviewAdapter {
@@ -19,9 +20,25 @@ public class ReviewAdapter {
                 .productId(orMirror(review.getProductId(), review.getProduct()))
                 .orderId(orMirror(review.getOrderId(), review.getOrder()))
                 .rating(review.getRating())
+                .reviewerName(displayName(review.getUser()))
                 .comment(review.getComment())
                 .createdAt(review.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * Full surnames are not shown on the storefront: "Asha R." is enough to signal a real
+     * person without publishing the reviewer's identity next to their purchase.
+     */
+    private static String displayName(User user) {
+        if (user == null || user.getName() == null || user.getName().isBlank()) {
+            return null;
+        }
+        String[] parts = user.getName().trim().split("\\s+");
+        if (parts.length == 1) {
+            return parts[0];
+        }
+        return parts[0] + " " + parts[parts.length - 1].charAt(0) + ".";
     }
 
     /**

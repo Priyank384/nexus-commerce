@@ -41,7 +41,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 
 Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed login attempts are rate-limited per IP with a Redis fixed-window counter.
 
-All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record; **Flyway** owns the schema (`V1`–`V14`) and Hibernate runs in `validate` mode only.
+All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V26`) and Hibernate runs in `validate` mode only.
 
 Observability ships in two layers: **Spring Boot Actuator + Micrometer + Prometheus** for self-hosted metrics (admin-gated), and the **New Relic Java APM agent** attached on `bootRun` when its jar is present. The HTTP server shuts down gracefully on SIGTERM.
 
@@ -63,7 +63,7 @@ Deployment is a multi-stage **Dockerfile** (Temurin 21 build → non-root runtim
 | **Spring Data JPA** | Repositories, ORM | (via starter) |
 | **Hibernate** | JPA provider, `ddl-auto: validate` | 7.x |
 | **MySQL** | Primary database | 8.4 / 9.6 validated |
-| **Flyway** | Versioned SQL migrations (`V1`–`V14`) | (via starter) |
+| **Flyway** | Versioned SQL migrations (`V1`–`V26`, mirrored for PostgreSQL) | (via starter) |
 | **Redis + Lettuce** | Spring Cache backend, refresh tokens, JWT blacklist, login rate limit, idempotency replay | Spring Data Redis |
 | **Lombok** | Boilerplate reduction | compileOnly |
 | **springdoc-openapi** | Swagger UI / OpenAPI 3 (+ bearer scheme) | 2.8.5 |
@@ -112,7 +112,7 @@ CREATE DATABASE nexuscommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 3. Ensure a user can connect to `localhost:3306` with rights on `nexuscommerce`.
 
-**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V14` under `src/main/resources/db/migration/`). Hibernate only validates the schema; it never alters it.
+**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V26` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
 
 ### 3.3 Redis setup
 
@@ -478,15 +478,15 @@ Every table also carries `created_datetime`, `updated_datetime`, and (via soft-d
 **Cart rules:**
 
 - Exactly **one live cart per user** — enforced by `uk_carts_live_user` on the generated `live_user_id` column, so soft-deleted carts free the slot.
-- **One live line per (cart, product)** — enforced by `uk_cart_items_live_pair`; adding a product already on the cart **sums the quantity** instead of creating a second line.
+- **One live line per (cart, variant)** — enforced by the V22 generated-column index; adding the same size again **sums the quantity** instead of creating a second line, while a Medium and a Large of one shirt are two lines.
 - `getMyCart` returns a synthetic empty cart (`items: []`, `grandTotal: 0`) on first access without persisting it, so browsing a cart doesn't create rows.
 - `checkout(userId, override)` refuses empty carts, optionally swaps in the caller's `orderItems` list, delegates to `OrderService.createOrder` (same stock reservation + snapshot pipeline), and clears the cart on success.
 
 **Review rules:**
 
-- Product must exist on the order (as a line item).
+- The order must belong to the caller and be **`PAID`**; the product must exist on it as a line item.
 - At most **one review per (orderId, productId)** — enforced at the DB level on live rows.
-- Rating: **> 0** and **≤ 10**.
+- Rating: **1–5** inclusive.
 
 ---
 
@@ -532,6 +532,8 @@ Design guarantees that are worth knowing before modifying the domain:
 | `V22__variant_scoped_cart_lines` | Completes the variant swap on carts: every live line gets a `variant_id`, the column becomes NOT NULL, and live uniqueness moves from `(cart, product)` to `(cart, variant)` so a Medium and a Large of the same shirt can coexist |
 | `V23__razorpay_payment_tracking` | `payment_intent_id` (our reference before money moves) and `paid_datetime`, indexed for the webhook lookup that arrives with no user context |
 | `V24__remember_intent_amount` | `payment_amount_paise`, the price the stored intent was issued at — see the payment section for why a repeat request must not silently replace it |
+| `V25__product_review_count` | `products.review_count` so a card can distinguish "never reviewed" (curated seed rating) from "reviews average to 0" |
+| `V26__backfill_review_counts_and_scale` | Converts legacy 10-point ratings to the 1–5 scale (`rating / 2`), then backfills `review_count` and the live average from non-deleted reviews |
 
 > **Why V7 uses a stored procedure.** On a fresh MySQL 8.4 database, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` makes the server **automatically drop** the FK-supporting index `fk_review_order`, because the composite already covers it. An unconditional `DROP INDEX fk_review_order` therefore fails with `1091 Can't DROP` — exactly what broke CI before commit `2afc8e8`. V7 now wraps both drops in `drop_index_if_present`, which reads `information_schema.STATISTICS` first and no-ops when the index isn't there. This lets one migration apply cleanly to both fresh CI databases and older dev databases that pre-date the composite.
 
@@ -689,6 +691,7 @@ List endpoints accept `?page=0&size=20` (defaults shown; `size` is clamped serve
 | Method | Path | Access | Body |
 |--------|------|--------|------|
 | POST | `/api/v1/users` | Public | `CreateUserRequestDto` |
+| GET | `/api/v1/users/me` | Bearer | — |
 | POST | `/api/v1/auth/login` | Public (rate-limited) | `LoginRequestDto` |
 | POST | `/api/v1/auth/refresh` | Public | `RefreshRequestDto` |
 | POST | `/api/v1/auth/logout` | Public (needs Bearer) | `RefreshRequestDto` |
@@ -697,6 +700,16 @@ List endpoints accept `?page=0&size=20` (defaults shown; `size` is clamped serve
 
 ```json
 { "name": "Rahul", "email": "rahul@example.com", "password": "secret123", "phone": "9999999999" }
+```
+
+**Profile (`GET /api/v1/users/me`)** — the JWT carries only id, email and role, so the account page
+reads name, phone and join date from here:
+
+```json
+{
+  "id": 4, "name": "Rahul", "email": "rahul@example.com", "phone": "9999999999",
+  "role": "USER", "enabled": true, "createdAt": "2026-10-20T09:14:03"
+}
 ```
 
 **Login body (`LoginRequestDto`):**
@@ -933,17 +946,24 @@ Line items in the response are rendered from the stored snapshots (`productName`
 **POST body (`CreateReviewRequestDto`):**
 
 ```json
-{ "orderId": 3, "productId": 1, "rating": 8.5, "comment": "Great product, fast delivery" }
+{ "orderId": 3, "productId": 1, "rating": 4.5, "comment": "Great product, fast delivery" }
 ```
 
 | Field | Required | Rules |
 |-------|----------|-------|
-| `orderId` | Yes | must exist |
+| `orderId` | Yes | must exist, belong to the caller, and be **`PAID`** |
 | `productId` | Yes | must exist and be a line item on that order |
-| `rating` | Yes | > 0 and ≤ 10 |
-| `comment` | No | trimmed; blank → stored as null |
+| `rating` | Yes | 1–5 inclusive (legacy 10-point rows are halved by V26) |
+| `comment` | No | trimmed; blank → stored as null; ≤ 2000 characters |
 
-Duplicate `(orderId, productId)` on a live review → **409**.
+Only the buyer works: another user's order → **403**, an unpaid order → **400**, duplicate live
+`(orderId, productId)` → **409**.
+
+Each write recomputes `products.rating` (live average, one decimal) and `products.review_count`,
+then evicts all `review:*` and all six `product:*` caches so a card does not keep serving the old
+average. With zero live reviews the curated seed rating stays; `reviewCount: 0` is what tells the
+storefront "never reviewed". Responses also carry `reviewerName` — first name plus surname
+initial, e.g. `"Asha R."` — instead of exposing the reviewer's full account.
 
 ### 12.8 Admin — `/api/v1/admin` (all `ROLE_ADMIN`)
 
@@ -1025,11 +1045,11 @@ Checkout delegates to `OrderService.createOrder`, so the same atomic stock reser
 
 | Step | Action | API |
 |------|--------|-----|
-| 1 | Confirm order + product | `GET /orders/{id}` |
-| 2 | Submit review (authenticated) | `POST /reviews` with matching `orderId` + `productId` |
-| 3 | Ratings on product page | `GET /reviews/product/1` |
+| 1 | Confirm the order is `PAID` and the product is a line | `GET /orders/{id}` |
+| 2 | Submit review (authenticated) | `POST /reviews` with matching `orderId` + `productId`, `rating` 1–5 |
+| 3 | Ratings on product page | `GET /reviews/product/{productId}` + `rating`/`reviewCount` on the product |
 
-**Failure:** product not on the order → **400**. Duplicate → **409**. Creating reviews requires a token (public reads do not).
+**Failure:** someone else's order → **403**; unpaid order → **400**; product not on the order → **400**. Duplicate → **409**. Creating reviews requires a token (public reads do not).
 
 ### Scenario E: Admin runs the store
 
@@ -1125,9 +1145,11 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 
 ### Reviews
 
-- [ ] `POST /api/v1/reviews` for a product on the caller's order → **201**
+- [ ] `POST /api/v1/reviews` for a product on the caller's **paid** order → **201**; product's `rating`/`reviewCount` change on the next read
 - [ ] Same body again → **409**
-- [ ] Rating = 0 or rating > 10 → **400**
+- [ ] Rating = 0 or rating > 5 → **400**
+- [ ] Unpaid order → **400**; another user's order → **403**
+- [ ] `GET /api/v1/users/me` with bearer → name/email/phone/role; without → **401**
 
 ### Admin (ADMIN token)
 
@@ -1559,6 +1581,43 @@ items lost `productId`/`variantId`, `DELETE /wishlist/items/{productId}` 400'd, 
 check NPE'd on a list created moments earlier. Each site now falls back to the association, which
 is free to read even through a lazy proxy.
 
+### Reviews that stand on a purchase (Phase 5)
+
+A review is evidence, not a comment box. `POST /api/v1/reviews` takes its author from the token,
+then requires that the referenced order **belongs to that user**, is **`PAID`**, and actually
+contains the product. One live review per `(order, product)` (V10), so a shopper who buys the same
+tee twice can still review each purchase.
+
+Ratings moved to the familiar **1–5** scale. `products.rating` is a curated seed only until the
+first live review; every create/delete then recomputes the average to one decimal and writes
+`review_count` alongside it (V25). `V26` halves any legacy 10-point rows (`8.5 → 4.3`) and
+backfills both columns from live reviews, which is what repaired four historic rows and two
+product rows on the hosted database. Because a product card is Redis-cached, a review write evicts
+`review:*` **and** all six `product:*` caches — otherwise the PDP would show a new review beneath
+an old average. A product with no reviews keeps its seeded rating; the UI uses `reviewCount === 0`
+to say "no reviews yet" instead of claiming a zero-star average.
+
+`GET /api/v1/users/me` backs the account page: the JWT carries only id, email and role, so name,
+phone and `createdAt` have to be read from the database.
+
+### Account hub and saved pieces (Phase 5)
+
+`/account` is a three-tab hub over existing APIs: **Profile** (`/users/me`), **Addresses** (full
+CRUD plus one shipping and one billing default, promoted server-side when a default is deleted),
+and **Saved pieces** (`/wishlist` items). The header links it beside Cart.
+
+The heart on a product card and on the PDP writes the user's **default wishlist** — named lists
+stay API-only. A wishlist row now carries `productSlug`, so the account grid links straight to the
+PDP without a second lookup; adding a saved piece to the bag needs a variant, so items saved
+without one link to "Choose a size" instead of guessing (the same rule `VariantResolver` enforces
+server-side).
+
+The PDP aggregate (`rating`, `reviewCount`) is server-rendered from the product row, while the
+review list and the "Write a review" gate are client-side: `useReviewableOrder` finds the newest
+paid order containing the product that has not been reviewed yet, and the form only appears when
+one exists. Submitting closes the dialog and calls `router.refresh()` so the server-rendered
+average catches up with the evicted caches.
+
 ---
 
 ## Document info
@@ -1567,7 +1626,7 @@ is free to read even through a lazy proxy.
 |-------|-------|
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
-| Schema version (Flyway) | **V24** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
+| Schema version (Flyway) | **V26** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
 | Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.

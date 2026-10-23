@@ -8,6 +8,7 @@ import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.User;
 
@@ -35,6 +36,13 @@ public class UserServiceImpl implements UserService {
                 .passwordHash(passwordEncoder.encode(requestDto.getPassword()))
                 .build();
         return userAdapter.mapToGetUserResponseDto(userRepository.save(user));
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public GetUserResponseDto getProfile(Long userId) {
+        return userAdapter.mapToGetUserResponseDto(userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user no longer exists")));
     }
 
     private static String normalizeEmail(String email) {

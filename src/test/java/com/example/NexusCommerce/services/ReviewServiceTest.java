@@ -35,6 +35,7 @@ import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderStatus;
+import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Review;
 import com.example.nexusCommerce.schema.User;
@@ -71,7 +72,11 @@ class ReviewServiceTest {
     }
 
     private Order sampleOrder() {
-        Order order = Order.builder().status(OrderStatus.DELIVERED).user(sampleUser()).build();
+        Order order = Order.builder()
+                .status(OrderStatus.DELIVERED)
+                .paymentStatus(PaymentStatus.PAID)
+                .user(sampleUser())
+                .build();
         order.setId(3L);
         return order;
     }
@@ -88,9 +93,9 @@ class ReviewServiceTest {
 
     @Test
     void getAllReviews_mapsPageOfReviews() {
-        Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
+        Review review = Review.builder().rating(BigDecimal.valueOf(4)).build();
         review.setId(1L);
-        GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(8)).build();
+        GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(4)).build();
 
         when(reviewRepository.findAll(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1));
@@ -105,9 +110,9 @@ class ReviewServiceTest {
 
     @Test
     void getReviewById_returnsMappedReview() {
-        Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
+        Review review = Review.builder().rating(BigDecimal.valueOf(4)).build();
         review.setId(1L);
-        GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(8)).build();
+        GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).rating(BigDecimal.valueOf(4)).build();
 
         when(reviewRepository.findById(1L)).thenReturn(Optional.of(review));
         when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
@@ -126,13 +131,18 @@ class ReviewServiceTest {
 
     @Test
     void deleteReview_deletesWhenReviewExists() {
-        Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
+        Product product = sampleProduct();
+        Review review = Review.builder().rating(BigDecimal.valueOf(4)).product(product).build();
         review.setId(1L);
         when(reviewRepository.findById(1L)).thenReturn(Optional.of(review));
+        when(reviewRepository.countByProductId(1L)).thenReturn(2L);
+        when(reviewRepository.averageRatingByProductId(1L)).thenReturn(3.5);
 
         reviewService.deleteReview(1L);
 
         verify(reviewRepository).delete(review);
+        assertEquals(0, product.getRating().compareTo(BigDecimal.valueOf(3.5)));
+        assertEquals(2, product.getReviewCount());
     }
 
     @Test
@@ -144,7 +154,7 @@ class ReviewServiceTest {
 
     @Test
     void getReviewsByProductId_mapsMatchingReviews() {
-        Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
+        Review review = Review.builder().rating(BigDecimal.valueOf(4)).build();
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).productId(1L).build();
 
         when(reviewRepository.findByProductId(eq(1L), any(Pageable.class)))
@@ -158,7 +168,7 @@ class ReviewServiceTest {
 
     @Test
     void getReviewsByOrderId_mapsMatchingReviews() {
-        Review review = Review.builder().rating(BigDecimal.valueOf(8)).build();
+        Review review = Review.builder().rating(BigDecimal.valueOf(4)).build();
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).orderId(3L).build();
 
         when(reviewRepository.findByOrderId(eq(3L), any(Pageable.class)))
@@ -177,17 +187,17 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(9))
+                .rating(BigDecimal.valueOf(5))
                 .comment("Excellent")
                 .build();
-        Review saved = Review.builder().order(order).product(product).rating(BigDecimal.valueOf(9)).comment("Excellent").build();
+        Review saved = Review.builder().order(order).product(product).rating(BigDecimal.valueOf(5)).comment("Excellent").build();
         saved.setId(1L);
         GetReviewResponseDto response = GetReviewResponseDto.builder()
                 .id(1L)
                 .orderId(3L)
                 .productId(1L)
                 .userId(7L)
-                .rating(BigDecimal.valueOf(9))
+                .rating(BigDecimal.valueOf(5))
                 .comment("Excellent")
                 .build();
 
@@ -201,7 +211,7 @@ class ReviewServiceTest {
 
         GetReviewResponseDto result = reviewService.createReview(dto, 7L);
 
-        assertEquals(BigDecimal.valueOf(9), result.getRating());
+        assertEquals(BigDecimal.valueOf(5), result.getRating());
         assertEquals("Excellent", result.getComment());
         assertEquals(7L, result.getUserId());
     }
@@ -212,7 +222,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
@@ -228,17 +238,17 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .comment("   ")
                 .build();
-        Review saved = Review.builder().order(order).product(product).rating(BigDecimal.valueOf(8)).comment(null).build();
+        Review saved = Review.builder().order(order).product(product).rating(BigDecimal.valueOf(4)).comment(null).build();
         saved.setId(1L);
         GetReviewResponseDto response = GetReviewResponseDto.builder()
                 .id(1L)
                 .orderId(3L)
                 .productId(1L)
                 .userId(7L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .comment(null)
                 .build();
 
@@ -260,7 +270,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(99L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         when(orderRepository.findById(99L)).thenReturn(Optional.empty());
@@ -275,7 +285,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
@@ -292,7 +302,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
@@ -318,7 +328,18 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(11))
+                .rating(BigDecimal.valueOf(6))
+                .build();
+
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
+    }
+
+    @Test
+    void createReview_whenRatingBelowOne_throwsInvalidRequestException() {
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(0.5))
                 .build();
 
         assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
@@ -340,7 +361,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, null));
@@ -354,7 +375,7 @@ class ReviewServiceTest {
         CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
                 .orderId(3L)
                 .productId(1L)
-                .rating(BigDecimal.valueOf(8))
+                .rating(BigDecimal.valueOf(4))
                 .build();
 
         when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
@@ -365,5 +386,82 @@ class ReviewServiceTest {
 
         assertThrows(ResourceNotFoundException.class, () -> reviewService.createReview(dto, 7L));
         verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void createReview_whenOrderIsUnpaid_throwsInvalidRequestException() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.CREATED);
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(5))
+                .build();
+
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> reviewService.createReview(dto, 7L));
+        verify(reviewRepository, never()).save(any(Review.class));
+    }
+
+    @Test
+    void createReview_recomputesProductRatingAndCount() {
+        Order order = sampleOrder();
+        Product product = sampleProduct();
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(5))
+                .comment("Excellent")
+                .build();
+        Review saved = Review.builder().order(order).product(product)
+                .rating(BigDecimal.valueOf(5)).comment("Excellent").build();
+        saved.setId(1L);
+
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
+        when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(sampleUser()));
+        when(reviewRepository.save(any(Review.class))).thenReturn(saved);
+        when(reviewRepository.countByProductId(1L)).thenReturn(3L);
+        when(reviewRepository.averageRatingByProductId(1L)).thenReturn(4.333);
+        when(reviewAdapter.mapToGetReviewResponseDto(saved))
+                .thenReturn(GetReviewResponseDto.builder().id(1L).build());
+
+        reviewService.createReview(dto, 7L);
+
+        // 4.333 is rounded to the one decimal the catalogue column stores.
+        assertEquals(0, product.getRating().compareTo(BigDecimal.valueOf(4.3)));
+        assertEquals(3, product.getReviewCount());
+        verify(productRepository).save(product);
+    }
+
+    @Test
+    void createReview_keepsCuratedRatingWhenNoLiveReviewsExist() {
+        Order order = sampleOrder();
+        Product product = sampleProduct();
+        CreateReviewRequestDto dto = CreateReviewRequestDto.builder()
+                .orderId(3L)
+                .productId(1L)
+                .rating(BigDecimal.valueOf(5))
+                .build();
+        Review saved = Review.builder().order(order).product(product).rating(BigDecimal.valueOf(5)).build();
+        saved.setId(1L);
+
+        when(orderRepository.findById(3L)).thenReturn(Optional.of(order));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(orderProductsRepository.existsByOrderIdAndProduct_Id(3L, 1L)).thenReturn(true);
+        when(reviewRepository.existsByOrder_IdAndProduct_Id(3L, 1L)).thenReturn(false);
+        when(userRepository.findById(7L)).thenReturn(Optional.of(sampleUser()));
+        when(reviewRepository.save(any(Review.class))).thenReturn(saved);
+        when(reviewRepository.countByProductId(1L)).thenReturn(0L);
+        when(reviewAdapter.mapToGetReviewResponseDto(saved))
+                .thenReturn(GetReviewResponseDto.builder().id(1L).build());
+
+        reviewService.createReview(dto, 7L);
+
+        assertEquals(0, product.getRating().compareTo(BigDecimal.valueOf(4.5)));
+        assertEquals(0, product.getReviewCount());
     }
 }

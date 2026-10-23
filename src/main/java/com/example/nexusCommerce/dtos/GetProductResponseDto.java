@@ -18,6 +18,8 @@ public class GetProductResponseDto {
     private BigDecimal price;
     private String image;
     private BigDecimal rating;
+    /** Zero until a real review exists; the curated seed rating is shown without a count. */
+    private Integer reviewCount;
     private Integer stock;
 
     /** Read-only fields the storefront listing cards need without a details call. */

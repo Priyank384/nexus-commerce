@@ -17,7 +17,7 @@ public class GetWishlistResponseDto {
     private String name;
     private Integer itemCount;
 
-    /** Only populated by GET /wishlist/{id}; list endpoints return the summary. */
+    /** Only GET /wishlist fills this; the list endpoints return the summary. */
     @Builder.Default
     private List<GetWishlistItemResponseDto> items = new ArrayList<>();
 }

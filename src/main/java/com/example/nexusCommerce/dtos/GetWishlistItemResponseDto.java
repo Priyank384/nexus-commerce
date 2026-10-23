@@ -15,6 +15,7 @@ import lombok.NoArgsConstructor;
 public class GetWishlistItemResponseDto {
     private Long id;
     private Long productId;
+    private String productSlug;
     private String productTitle;
     private String productImage;
     private BigDecimal price;

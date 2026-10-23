@@ -90,7 +90,7 @@ class ReviewRepositoryTest {
                 .user(user)
                 .order(firstOrder)
                 .product(phone)
-                .rating(BigDecimal.valueOf(8.5))
+                .rating(BigDecimal.valueOf(4.5))
                 .comment("Great phone")
                 .build();
         testEntityManager.persistAndFlush(phoneReview);
@@ -122,6 +122,30 @@ class ReviewRepositoryTest {
     @Test
     void existsByOrderIdAndProductId_whenReviewDoesNotExist_returnsFalse() {
         assertFalse(reviewRepository.existsByOrder_IdAndProduct_Id(secondOrder.getId(), phone.getId()));
+    }
+
+    @Test
+    void averageAndCountIgnoreSoftDeletedReviews() {
+        // setUp cleared the persistence context, so the reviewer is re-read as a managed row
+        // rather than reusing a detached association.
+        User reviewer = reviewRepository.findById(phoneReview.getId()).orElseThrow().getUser();
+        Review second = Review.builder()
+                .user(reviewer)
+                .order(secondOrder)
+                .product(phone)
+                .rating(BigDecimal.valueOf(3.5))
+                .build();
+        testEntityManager.persistAndFlush(second);
+
+        assertEquals(2, reviewRepository.countByProductId(phone.getId()));
+        assertEquals(4.0, reviewRepository.averageRatingByProductId(phone.getId()), 0.001);
+
+        reviewRepository.delete(second);
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        assertEquals(1, reviewRepository.countByProductId(phone.getId()));
+        assertEquals(4.5, reviewRepository.averageRatingByProductId(phone.getId()), 0.001);
     }
 
     @Test

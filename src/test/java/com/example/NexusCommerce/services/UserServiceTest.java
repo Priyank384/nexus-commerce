@@ -18,6 +18,7 @@ import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.User;
 
@@ -95,5 +96,31 @@ class UserServiceTest {
 
         verify(userRepository).save(captor.capture());
         assertEquals("test@example.com", captor.getValue().getEmail());
+    }
+
+    @Test
+    void getProfile_returnsCallerProfile() {
+        User user = User.builder().name("Asha Rao").email("asha@example.com").build();
+        user.setId(7L);
+        GetUserResponseDto response = GetUserResponseDto.builder()
+                .id(7L)
+                .name("Asha Rao")
+                .email("asha@example.com")
+                .build();
+
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.of(user));
+        when(userAdapter.mapToGetUserResponseDto(user)).thenReturn(response);
+
+        GetUserResponseDto result = userService.getProfile(7L);
+
+        assertEquals("Asha Rao", result.getName());
+        assertEquals("asha@example.com", result.getEmail());
+    }
+
+    @Test
+    void getProfile_whenUserGone_throwsResourceNotFoundException() {
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> userService.getProfile(7L));
     }
 }

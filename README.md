@@ -19,7 +19,7 @@ NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("
 - **Payments (Razorpay)** — Server-side intent creation, browser Checkout, signature-verified capture, and a webhook reconciler (`/api/v1/payments/**`). Three invariants make it safe: signatures are recomputed over the **stored** intent, never over a client-supplied id; settling is a **conditional UPDATE**, so a client verify and Razorpay's webhook racing for the same order produce exactly one confirmation mail; and a repeat `createPayment` **reuses the intent** while the order still prices the same (V24 records the amount). See [Phase 2a in PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md#19-phase-2a--apparel-catalogue-wishlists-addresses-and-payments).
 - **Inventory** — Placing an order atomically decrements **variant** stock (oversell-safe); admins restock a single variant via `PUT /api/v1/products/variants/{variantId}`. `PUT /api/v1/admin/products/{id}/stock` only works for a style with no variants (or exactly one, which it writes through); a product with a size+colour grid answers **400** there, because the variant rows are the source of truth and an aggregate-only write is undone by the next resync.
 - **Orders** — Create orders from a list of line items (product id + quantity), list/fetch/update/delete orders, fetch an order **summary**, and read **your own orders** (`/me`) or any user's (admin). Line items are **snapshotted** (price, name, image) so history never changes when the catalogue is edited. Both `POST /orders` and `POST /cart/checkout` accept an optional **`Idempotency-Key`** header so a retried submission can never place a duplicate order.
-- **Reviews** — Create reviews only when the product appears on the given order; at most **one review per (order, product)** pair; list reviews globally, by id, by product, or by order; delete by id (admin).
+- **Reviews** — A review is **purchase-backed**: it must name the caller's own **paid** order, the product must be a live line on that order, and there is at most **one review per (order, product)** pair. Ratings are **1–5**; the product's `rating` is recomputed as the live average and `reviewCount` follows it (styles with no reviews keep their curated rating). Reviewer names are shortened to first name + surname initial. List reviews globally, by id, by product, or by order; delete by id (admin).
 - **Admin dashboard** — Aggregate business metrics, paged user listing, and user role/enable management (all `ROLE_ADMIN`).
 - **Domain events** — `OrderPlacedEvent` and `OrderStatusChangedEvent` are published after commit and consumed asynchronously by an `@Async @TransactionalEventListener` — currently wired to a **logging notification stub** (`LoggingNotificationService`) that a real mail/SMS bean can replace without touching callers.
 - **Data integrity** — Soft-delete on every entity, `@Version` optimistic locking on orders, and DB-level uniqueness that survives soft-deletes (see [Data integrity & migrations](#data-integrity--migrations)).
@@ -178,7 +178,7 @@ RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
    ./gradlew bootRun
    ```
 
-   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V24`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Plain Thread" seed catalogue, wishlists, addresses and the payment columns).
+   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V26`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Plain Thread" seed catalogue, wishlists, addresses, the payment columns and review counts).
 
    To run on **PostgreSQL** instead (validated against Aiven), set the four `DB_*` keys plus `FLYWAY_LOCATIONS=classpath:db/migration-postgres` in `.env` and start the app — no other change is needed. The MySQL set and the PostgreSQL set are edited together; every version has a twin.
 
@@ -250,7 +250,7 @@ The API is **stateless JWT** with an **opaque, rotating refresh token**. Log in 
 | Access | What |
 |--------|------|
 | **Public** (no token) | Register, login, refresh, logout, Swagger, health/liveness/readiness probes, and **browsing**: `GET` products, variants, category tree, facets, reviews. Uploaded product images served from `/uploads/**`. `POST /payments/razorpay/webhook` is also public — it is authenticated by HMAC signature over the raw body, not by a token. |
-| **Any authenticated user** | Cart surface (`GET /cart`, `POST /cart/items`, `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout`), place an order directly, create a review, read **your own** orders (`/orders/me`, `/orders/{id}`, `/orders/{id}/summary`), the whole `/wishlist` and `/addresses` surface, and `/payments/**` for orders you own. Order read/update is scoped so you can only touch orders you own. |
+| **Any authenticated user** | Cart surface (`GET /cart`, `POST /cart/items`, `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout`), place an order directly, create a review for **your own paid order**, read **your own** profile (`GET /users/me`) and orders (`/orders/me`, `/orders/{id}`, `/orders/{id}/summary`), the whole `/wishlist` and `/addresses` surface, and `/payments/**` for orders you own. Order read/update is scoped so you can only touch orders you own. |
 | **`ROLE_ADMIN` only** | All catalogue **writes** (create/update/delete products, variants & categories), product **image upload**, review **deletion**, the order **list** (`GET /orders`) and order **deletion**, the whole `/api/v1/admin/**` surface, viewing any user's orders, and everything under `/actuator/**` except the health probes. |
 
 **Errors** — Missing/invalid/revoked token on a protected route → `401` (`"Unauthorized!"`); valid token but wrong role / not the owner → `403` (`"Forbidden!"`); too many failed logins → `429`.
@@ -296,6 +296,7 @@ The **Access** column below shows the minimum role required.
 | `POST` | `/api/v1/auth/login` | Public (rate-limited) | Log in (`LoginRequestDto`: `email`, `password`) → JWT access token + single-use refresh token. |
 | `POST` | `/api/v1/auth/refresh` | Public | Consume the previous refresh token, receive a fresh access + refresh pair. |
 | `POST` | `/api/v1/auth/logout` | Public (needs `Authorization` header) | Blacklist the current access-token `jti` in Redis and delete the paired refresh token. |
+| `GET` | `/api/v1/users/me` | **User** | The caller's own profile (`GetUserResponseDto`: id, name, email, phone, role, createdAt). |
 
 ### Categories — `/api/v1/categories`
 
@@ -404,8 +405,8 @@ Owner-scoped; `GET /wishlist` returns the caller's default list with its items.
 | `GET` | `/{id}` | Public | Get review by id. |
 | `GET` | `/product/{productId}` | Public | Reviews for a product (paged). |
 | `GET` | `/order/{orderId}` | Public | Reviews for an order (paged). |
-| `POST` | `/` | User | Create review (`CreateReviewRequestDto`: `orderId`, `productId`, `rating`, optional `comment`). |
-| `DELETE` | `/{id}` | **ADMIN** | Delete review. |
+| `POST` | `/` | User | Create review (`CreateReviewRequestDto`: `orderId`, `productId`, `rating` 1–5, optional `comment` ≤2000). The order must be the caller's, **paid**, and contain the product. |
+| `DELETE` | `/{id}` | **ADMIN** | Delete review; the product's `rating` and `reviewCount` are recomputed. |
 
 ### Admin — `/api/v1/admin`
 
@@ -433,10 +434,11 @@ All endpoints below require `ROLE_ADMIN`.
 
 **Review rules (business logic):**
 
-- `orderId` and `productId` must exist; the **product must be a line item** on that order.
+- The order must belong to the caller and be **`PAID`** (`403` for someone else's, `400` for unpaid); `productId` must be a **line item** on that order.
 - **Duplicate** reviews for the same `(orderId, productId)` are rejected (**409 Conflict**) — enforced by a DB unique constraint on live reviews.
-- `rating` is required, must be **greater than 0** and **at most 10** (service validation).
-- `comment` is optional; blank/whitespace-only comments are treated as no comment.
+- `rating` is required and must be **1–5** inclusive (service validation).
+- `comment` is optional, **≤ 2000 characters**; blank/whitespace-only comments are treated as no comment.
+- A create or delete recomputes the product's live-average `rating` and `reviewCount` and evicts both review and product caches.
 
 ### Typical HTTP status codes (errors)
 
@@ -493,8 +495,10 @@ Several guarantees are worth knowing before you touch the domain:
 | `V22` | Variant-scoped cart lines — `variant_id` becomes `NOT NULL` and live uniqueness moves from `(cart, product)` to `(cart, variant)`, so a shopper can hold a Medium and a Large of the same shirt. Unresolvable live lines are removed rather than left ambiguous. |
 | `V23` | Razorpay references on `orders`: `payment_intent_id` (what the signature check and the webhook lookup key on, indexed) and `paid_datetime`. |
 | `V24` | `orders.payment_amount_paise` — remembers what the stored intent was priced at, so a repeat `createPayment` can tell whether reusing it is still correct. |
+| `V25` | `products.review_count` — denormalised live-review count beside the rating so listings do not aggregate on every read. |
+| `V26` | Backfill: converts pre-Phase-5 reviews from the 10-point scale to 1–5, then recomputes `review_count` and the live-average `rating` for products that already hold reviews. |
 
-Every version above has a PostgreSQL twin in `src/main/resources/db/migration-postgres` (same filenames, dialect-correct DDL); the two sets are checked to be the same 24 files.
+Every version above has a PostgreSQL twin in `src/main/resources/db/migration-postgres` (same filenames, dialect-correct DDL); the two sets are checked to be the same 26 files.
 
 > **MySQL 8.4 note on V7.** On a fresh MySQL 8.4 DB, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` causes the server to drop the FK-supporting index `fk_review_order` automatically. An unconditional `DROP INDEX fk_review_order` then fails with `1091 Can't DROP`. V7 wraps both drops in a stored procedure that checks `information_schema.STATISTICS` before issuing the DDL, so it applies cleanly on **fresh MySQL 8.4** databases and on **older dev databases** that pre-date the composite.
 

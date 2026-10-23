@@ -60,6 +60,13 @@ public class Product extends BaseEntity {
     @Column(nullable = false, precision = 3, scale = 1)
     private BigDecimal rating;
 
+    // Denormalised count behind the storefront's "4.6 · 12" summary. Averaging on every
+    // listing row would cost one aggregate per product; it is recomputed from live reviews
+    // whenever one is written or removed.
+    @Column(name = "review_count", nullable = false)
+    @Builder.Default
+    private int reviewCount = 0;
+
     /**
      * Legacy aggregate stock. Kept for backward compatibility with historic order
      * snapshots; the truth lives at the variant level (see {@link #variants}).

@@ -48,6 +48,7 @@ public class WishlistAdapter {
                         // Prefer the loaded product's id: item.productId is an insertable=false
                         // view of the association and is only backfilled on a loaded row.
                         .productId(product != null ? product.getId() : item.getProductId())
+                        .productSlug(product != null ? product.getSlug() : null)
                         .productTitle(product != null ? product.getTitle() : null)
                         .productImage(product != null ? product.getImage() : null)
                         .price(product != null ? product.getPrice() : null)

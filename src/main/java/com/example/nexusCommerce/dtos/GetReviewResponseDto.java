@@ -24,6 +24,9 @@ public class GetReviewResponseDto {
 
     private BigDecimal rating;
 
+    /** First name and surname initial ("Asha R."); null for rows whose account is gone. */
+    private String reviewerName;
+
     private String comment;
 
     private LocalDateTime createdAt;
