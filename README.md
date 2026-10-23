@@ -85,7 +85,7 @@ NexusCommerce is wired for **production-style visibility** through Actuator + Mi
 ### Application and SQL logging
 
 - **Hibernate SQL** — `spring.jpa.show-sql: false` (statement logging goes through the `org.hibernate.SQL` logger instead), keeping the hot path free of synchronized `System.out` writes. Enable `show-sql` only for local debugging.
-- **Spring Boot logging** — Default Logback/console logging applies for framework and application classes; a `logstash-logback-encoder` TCP appender is configured for the ELK stack defined in `docker-compose.yml` (`localhost:5044`). It falls back with a WARN when Logstash isn't reachable — expected on plain local runs.
+- **Spring Boot logging** — Default Logback/console logging applies for framework and application classes; a `logstash-logback-encoder` TCP appender is configured for the ELK stack defined in `docker-compose.yml` (`localhost:5044`). It is attached only outside the `prod` profile (`SPRING_PROFILES_ACTIVE=prod` on Render), because without a Logstash listener the appender retries forever and floods the logs; local runs still show a harmless WARN.
 
 ---
 

@@ -7,18 +7,23 @@
         </encoder>
     </appender>
 
-    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
-        <destination>localhost:5044</destination>
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
-    </appender>
+    <!-- The Logstash pipeline only exists in docker-compose. On a host without it the
+         TCP appender retries localhost:5044 forever and floods the logs with stack traces,
+         so it is attached for every profile except prod. -->
+    <springProfile name="!prod">
+        <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+            <destination>localhost:5044</destination>
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+            <appender-ref ref="LOGSTASH" />
+        </root>
+    </springProfile>
 
-    <!-- <appender name="OTEL" class="io.opentelemetry.instrumentation.logback.appender.v1_0.OpenTelemetryAppender">
-        <captureExperimentalAttributes>true</captureExperimentalAttributes>
-        <captureKeyValuePairAttributes>true</captureKeyValuePairAttributes>
-    </appender> -->
-
-    <root level="INFO">
-        <appender-ref ref="CONSOLE" />
-        <appender-ref ref="LOGSTASH" />
-    </root>
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE" />
+        </root>
+    </springProfile>
 </configuration>

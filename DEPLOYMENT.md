@@ -121,7 +121,9 @@ window; that is expected.
 1. Render Dashboard → **New → Blueprint**, pick `Priyank384/nexus-commerce`, branch `dev`.
    Render reads `render.yaml` and creates the `nexus-commerce-api` web service.
 2. Fill every `sync: false` variable. Two that are easy to get wrong:
-   - `JWT_SECRET` — generate a fresh one: `openssl rand -base64 48`.
+   - `JWT_SECRET` — generate a fresh one: `openssl rand -base64 48`. It must be **≥ 32
+     bytes**; JJWT rejects shorter HMAC-SHA keys and the app aborts at startup with a
+     `JWT_SECRET must be at least 32 bytes` message. Rotating it signs every user out.
    - `CORS_ALLOWED_ORIGINS` — comma-separated **Vercel URL and the Render URL itself**:
      `https://plain-thread.vercel.app,https://nexus-commerce-api.onrender.com`.
      Swagger UI posts from the API's own origin and is subject to the same filter.

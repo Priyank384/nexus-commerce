@@ -27,7 +27,15 @@ public class JwtService {
 
     public JwtService(@Value("${app.jwt.secret}") String secret,
                       @Value("${app.jwt.expiration-minutes}") long expirationMinutes) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        // HMAC-SHA256 needs a 256-bit key. Without this guard the failure surfaces as a
+        // WeakKeyException from inside JJWT, which does not name the variable to fix.
+        if (keyBytes.length < 32) {
+            throw new IllegalStateException(
+                    "JWT_SECRET must be at least 32 bytes (found " + keyBytes.length
+                            + "). Generate one with: openssl rand -base64 48");
+        }
+        this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expiration = Duration.ofMinutes(expirationMinutes);
     }
 
