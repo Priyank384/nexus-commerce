@@ -26,4 +26,9 @@ public class GetProductResponseDto {
     private String slug;
     private String brand;
     private BigDecimal compareAtPrice;
+
+    /** Catalogue placement, and whether this piece is published to the storefront. */
+    private String category;
+    private Long categoryId;
+    private Boolean isActive;
 }

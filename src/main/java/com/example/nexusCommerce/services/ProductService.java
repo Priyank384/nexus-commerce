@@ -14,6 +14,7 @@ public interface ProductService {
     PageResponse<GetProductResponseDto> getAllProducts(int page, int size);
     GetProductResponseDto getProductById(Long id);
     GetProductWithDetailsResponseDto getProductWithDetailsById(Long id);
+    GetProductWithDetailsResponseDto getProductWithDetailsForAdmin(Long id);
     GetProductWithDetailsResponseDto getProductBySlug(String slug);
     PageResponse<GetProductWithDetailsResponseDto> search(ProductSearchRequestDto query);
     List<String> getAvailableSizes();

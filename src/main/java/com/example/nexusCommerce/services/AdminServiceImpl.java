@@ -2,13 +2,19 @@ package com.example.nexusCommerce.services;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.nexusCommerce.adapters.ProductAdapter;
 import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.AdminMetricsResponseDto;
+import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.dtos.UpdateUserRequestDto;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
@@ -20,6 +26,7 @@ import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.OrderStatus;
+import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Role;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -38,6 +45,7 @@ public class AdminServiceImpl implements AdminService {
     private final OrderProductsRepository orderProductsRepository;
     private final ReviewRepository reviewRepository;
     private final UserAdapter userAdapter;
+    private final ProductAdapter productAdapter;
 
     @Transactional(readOnly = true)
     @Override
@@ -63,8 +71,37 @@ public class AdminServiceImpl implements AdminService {
 
     @Transactional(readOnly = true)
     @Override
+    public PageResponse<GetProductResponseDto> listProducts(int page, int size, String q, boolean outOfStockOnly) {
+        // The admin table reads newest first; Pagination.of pins id ascending for the
+        // storefront pages, so the direction is overridden here rather than duplicated.
+        Pageable pageable = Pagination.of(page, size).withSort(Sort.by(Sort.Direction.DESC, "id"));
+        // Same predicate as the dashboard's outOfStockProducts metric, so the inventory
+        // filter and the headline count can never disagree.
+        Page<Product> products = productRepository.searchForAdmin(
+                keywordPattern(q), outOfStockOnly ? 0 : null, pageable);
+        return PageResponse.of(products, productAdapter::mapToGetProductResponseDto);
+    }
+
+    /**
+     * Mirrors the storefront sanitiser: LIKE metacharacters become spaces rather than wildcards,
+     * so an admin typing "linen_tee" searches for both words instead of matching everything.
+     */
+    private static String keywordPattern(String q) {
+        if (q == null || q.isBlank()) {
+            return null;
+        }
+        String cleaned = q.replaceAll("[\\\\%_]", " ")
+                .trim()
+                .replaceAll("\\s+", " ")
+                .toLowerCase(Locale.ROOT);
+        return cleaned.isEmpty() ? null : "%" + cleaned + "%";
+    }
+
+    @Transactional(readOnly = true)
+    @Override
     public PageResponse<GetUserResponseDto> listUsers(int page, int size, String q) {
-        var pageable = Pagination.of(page, size);
+        // Newest accounts first, so a just-registered shopper is visible without paging.
+        var pageable = Pagination.of(page, size).withSort(Sort.by(Sort.Direction.DESC, "id"));
         var users = q == null || q.isBlank()
                 ? userRepository.findAll(pageable)
                 : userRepository.findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(

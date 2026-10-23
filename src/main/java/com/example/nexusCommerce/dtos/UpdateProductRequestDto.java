@@ -31,6 +31,9 @@ public class UpdateProductRequestDto {
     @PositiveOrZero(message = "Compare-at price must not be negative")
     private BigDecimal compareAtPrice;
 
+    /** Null compareAtPrice means "leave unchanged", so taking a product off sale needs its own flag. */
+    private Boolean clearCompareAtPrice;
+
     private String image;
 
     @DecimalMin(value = "0", message = "Product rating must be between 0 and 5")

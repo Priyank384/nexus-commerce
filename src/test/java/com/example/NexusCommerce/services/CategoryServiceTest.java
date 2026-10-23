@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +23,7 @@ import org.springframework.data.domain.Pageable;
 import com.example.nexusCommerce.adapters.CategoryAdapter;
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
 import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
+import com.example.nexusCommerce.dtos.UpdateCategoryRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
@@ -158,7 +160,7 @@ class CategoryServiceTest {
 
     @Test
     void updateCategory_updatesNameWhenValid() {
-        CreateCategoryRequestDto dto = CreateCategoryRequestDto.builder().name("Updated Name").build();
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder().name("Updated Name").build();
         Category existing = Category.builder().name("Old Name").build();
         existing.setId(1L);
         Category updated = Category.builder().name("Updated Name").build();
@@ -175,7 +177,7 @@ class CategoryServiceTest {
 
     @Test
     void updateCategory_whenNotFound_throwsResourceNotFoundException() {
-        CreateCategoryRequestDto dto = CreateCategoryRequestDto.builder().name("Updated Name").build();
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder().name("Updated Name").build();
         when(categoryRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> categoryService.updateCategory(1L, dto));
@@ -183,7 +185,7 @@ class CategoryServiceTest {
 
     @Test
     void updateCategory_whenDuplicateNameForAnotherCategory_throwsDuplicateResourceException() {
-        CreateCategoryRequestDto dto = CreateCategoryRequestDto.builder().name("Electronics").build();
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder().name("Electronics").build();
         Category existing = Category.builder().name("Old Name").build();
         existing.setId(1L);
         Category other = Category.builder().name("Electronics").build();
@@ -193,5 +195,77 @@ class CategoryServiceTest {
         when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Electronics")).thenReturn(Optional.of(other));
 
         assertThrows(DuplicateResourceException.class, () -> categoryService.updateCategory(1L, dto));
+    }
+
+    @Test
+    void updateCategory_movesACategoryBackToTopLevel() {
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder()
+                .name("Denim")
+                .moveToTopLevel(true)
+                .build();
+        Category parent = Category.builder().name("Men").build();
+        parent.setId(2L);
+        Category existing = Category.builder().name("Denim").parent(parent).parentId(2L).build();
+        existing.setId(1L);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.findByNameIgnoreCaseAndParentIdIsNull("Denim")).thenReturn(Optional.empty());
+        when(categoryRepository.save(existing)).thenReturn(existing);
+
+        GetCategoryResponseDto result = categoryService.updateCategory(1L, dto);
+
+        assertNull(result.getParentId());
+        assertNull(existing.getParent());
+        assertNull(existing.getParentId());
+    }
+
+    @Test
+    void updateCategory_rejectsParentIdTogetherWithMoveToTopLevel() {
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder()
+                .name("Denim")
+                .parentId(2L)
+                .moveToTopLevel(true)
+                .build();
+        Category existing = Category.builder().name("Denim").build();
+        existing.setId(1L);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        assertThrows(InvalidRequestException.class, () -> categoryService.updateCategory(1L, dto));
+        verify(categoryRepository, never()).save(any(Category.class));
+    }
+
+    @Test
+    void updateCategory_rejectsBeingItsOwnParent() {
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder()
+                .name("Denim")
+                .parentId(1L)
+                .build();
+        Category existing = Category.builder().name("Denim").build();
+        existing.setId(1L);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        assertThrows(InvalidRequestException.class, () -> categoryService.updateCategory(1L, dto));
+        verify(categoryRepository, never()).save(any(Category.class));
+    }
+
+    @Test
+    void updateCategory_rejectsMovingUnderItsOwnDescendant() {
+        UpdateCategoryRequestDto dto = UpdateCategoryRequestDto.builder()
+                .name("Men")
+                .parentId(2L)
+                .build();
+        Category existing = Category.builder().name("Men").build();
+        existing.setId(1L);
+        Category child = Category.builder().name("Denim").parent(existing).parentId(1L).build();
+        child.setId(2L);
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(categoryRepository.findById(2L)).thenReturn(Optional.of(child));
+        when(categoryRepository.findByNameIgnoreCaseAndParentId("Men", 2L)).thenReturn(Optional.empty());
+
+        assertThrows(InvalidRequestException.class, () -> categoryService.updateCategory(1L, dto));
+        verify(categoryRepository, never()).save(any(Category.class));
     }
 }

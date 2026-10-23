@@ -1,6 +1,5 @@
 package com.example.nexusCommerce.dtos;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,16 +16,11 @@ import lombok.experimental.SuperBuilder;
 @AllArgsConstructor
 @SuperBuilder
 public class GetProductWithDetailsResponseDto extends GetProductResponseDto {
-    private String category;
-    private Long categoryId;
     private String categorySlug;
 
-    private String brand;
     private String material;
     private String careInstructions;
     private String gender;
-    private BigDecimal compareAtPrice;
-    private Boolean isActive;
 
     /**
      * Empty for list/search responses: variants and gallery images are only loaded for

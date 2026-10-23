@@ -21,6 +21,7 @@ import com.example.nexusCommerce.adapters.CategoryAdapter;
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
 import com.example.nexusCommerce.dtos.GetCategoryNodeResponseDto;
 import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
+import com.example.nexusCommerce.dtos.UpdateCategoryRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
@@ -48,7 +49,7 @@ public class CategoryServiceImpl implements CategoryService {
             PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES }, allEntries = true)
     @Override
     public GetCategoryResponseDto createCategory(CreateCategoryRequestDto requestDto){
-        String normalizedName = validateAndNormalizeName(requestDto);
+        String normalizedName = validateAndNormalizeName(requestDto.getName());
         Long parentId = requestDto.getParentId();
         Category parent = null;
         if (parentId != null) {
@@ -151,12 +152,17 @@ public class CategoryServiceImpl implements CategoryService {
     @CacheEvict(cacheNames = { CATEGORY_ALL, CATEGORY_BY_ID, CATEGORY_TREE, PRODUCT_BY_CATEGORY,
             PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES }, allEntries = true)
     @Override
-    public GetCategoryResponseDto updateCategory(Long id, CreateCategoryRequestDto requestDto) {
-        String normalizedName = validateAndNormalizeName(requestDto);
+    public GetCategoryResponseDto updateCategory(Long id, UpdateCategoryRequestDto requestDto) {
+        String normalizedName = validateAndNormalizeName(requestDto.getName());
         Category existingCategory = categoryRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Category with id: " + id + " Not Found!"));
 
-        Long parentId = requestDto.getParentId() != null ? requestDto.getParentId() : existingCategory.getParentId();
+        boolean moveToTopLevel = Boolean.TRUE.equals(requestDto.getMoveToTopLevel());
+        if (moveToTopLevel && requestDto.getParentId() != null) {
+            throw new InvalidRequestException("Send either parentId or moveToTopLevel, not both");
+        }
+        Long parentId = moveToTopLevel ? null
+                : requestDto.getParentId() != null ? requestDto.getParentId() : existingCategory.getParentId();
         if (id.equals(parentId)) {
             throw new InvalidRequestException("A category cannot be its own parent");
         }
@@ -174,7 +180,12 @@ public class CategoryServiceImpl implements CategoryService {
         if (requestDto.getDescription() != null) {
             existingCategory.setDescription(trimToNull(requestDto.getDescription()));
         }
-        if (requestDto.getParentId() != null && !requestDto.getParentId().equals(existingCategory.getParentId())) {
+        if (moveToTopLevel) {
+            // parent_id is read-only, so the association drives the update; the field is
+            // cleared too because the adapter reads it first when it is populated.
+            existingCategory.setParent(null);
+            existingCategory.setParentId(null);
+        } else if (requestDto.getParentId() != null && !requestDto.getParentId().equals(existingCategory.getParentId())) {
             reparent(existingCategory, requestDto.getParentId());
         }
         if (requestDto.getSlug() != null && !requestDto.getSlug().isBlank()) {
@@ -234,10 +245,10 @@ public class CategoryServiceImpl implements CategoryService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private String validateAndNormalizeName(CreateCategoryRequestDto requestDto) {
-        if (requestDto == null || requestDto.getName() == null || requestDto.getName().isBlank()) {
+    private String validateAndNormalizeName(String name) {
+        if (name == null || name.isBlank()) {
             throw new InvalidRequestException("Category name must not be blank!");
         }
-        return requestDto.getName().trim();
+        return name.trim();
     }
 }

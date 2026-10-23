@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.nexusCommerce.dtos.CreateCategoryRequestDto;
 import com.example.nexusCommerce.dtos.GetCategoryNodeResponseDto;
 import com.example.nexusCommerce.dtos.GetCategoryResponseDto;
+import com.example.nexusCommerce.dtos.UpdateCategoryRequestDto;
 import com.example.nexusCommerce.services.CategoryService;
 import com.example.nexusCommerce.utils.ApiResponse;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -85,10 +86,12 @@ public class CategoryController {
     }
 
     @Operation(summary = "Update a category",
-               description = "Renames an existing category. Requires ROLE_ADMIN.")
+               description = "Renames or reparents an existing category. Omit parentId to keep the current "
+                             + "parent; send moveToTopLevel=true to detach it instead. Rejects cycles and "
+                             + "duplicate names under the target parent. Requires ROLE_ADMIN.")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<GetCategoryResponseDto>> updateCategory(@PathVariable Long id,
-                                                                @Valid @RequestBody CreateCategoryRequestDto requestDto){
+                                                                @Valid @RequestBody UpdateCategoryRequestDto requestDto){
         GetCategoryResponseDto updatedCategory = categoryService.updateCategory(id, requestDto);
         return ResponseEntity
                 .ok(ApiResponse.success(updatedCategory, "Category updated successfully!"));

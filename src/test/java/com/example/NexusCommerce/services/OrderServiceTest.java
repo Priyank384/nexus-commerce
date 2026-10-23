@@ -28,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import com.example.nexusCommerce.adapters.OrderAdapter;
 import com.example.nexusCommerce.dtos.CreateOrderRequestDto;
@@ -171,6 +172,30 @@ class OrderServiceTest {
         assertEquals(1, result.getContent().size());
         assertEquals(1L, result.getContent().get(0).getId());
         assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void getAllOrders_asksForNewestFirst() {
+        when(orderRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        orderService.getAllOrders(0, 20);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(orderRepository).findAll(captor.capture());
+        assertEquals(Sort.Direction.DESC, captor.getValue().getSort().getOrderFor("id").getDirection());
+    }
+
+    @Test
+    void getOrdersByUserId_asksForNewestFirst() {
+        when(orderRepository.findByUser_Id(eq(7L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        orderService.getOrdersByUserId(7L, 0, 20);
+
+        ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
+        verify(orderRepository).findByUser_Id(eq(7L), captor.capture());
+        assertEquals(Sort.Direction.DESC, captor.getValue().getSort().getOrderFor("id").getDirection());
     }
 
     @Test

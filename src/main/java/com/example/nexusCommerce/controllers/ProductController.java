@@ -26,6 +26,8 @@ import com.example.nexusCommerce.utils.ApiResponse;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
 
+import org.springdoc.core.annotations.ParameterObject;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,7 +42,8 @@ public class ProductController {
 
     @GetMapping
     @Operation(summary="Get all products",
-               description="Fetches one page of the catalogue. Defaults to the first 20 products."
+               description="Fetches one page of the published catalogue. Defaults to the first 20 products. "
+                           + "Unpublished drafts are excluded; admins list them at /api/v1/admin/products."
     )
     public ResponseEntity<ApiResponse<PageResponse<GetProductResponseDto>>> getAllProducts(
             @RequestParam(name = "page", defaultValue = "0") int page,
@@ -50,7 +53,7 @@ public class ProductController {
     }
 
     @Operation(summary="Get Product using specific Id",
-               description="Fetches the specific product with the given Id."
+               description="Fetches the specific product with the given Id. An unpublished draft is reported as 404."
     )
     @GetMapping("/{id}")    public ResponseEntity<ApiResponse<GetProductResponseDto>> getProductById(@PathVariable Long id){
         GetProductResponseDto product = productService.getProductById(id);
@@ -59,7 +62,8 @@ public class ProductController {
 
 
     @Operation(summary="Get Product with category",
-                description="Fetched the Product with other details like its category using specific ID."
+                description="Fetched the Product with other details like its category using specific ID. "
+                            + "An unpublished draft is reported as 404."
     )
     @GetMapping("/{id}/details")    public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductWithDetailsById(@PathVariable Long id){
         GetProductWithDetailsResponseDto product = productService.getProductWithDetailsById(id);
@@ -108,7 +112,9 @@ public class ProductController {
     )
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> search(
-            @ModelAttribute ProductSearchRequestDto query){
+            // Spring binds the DTO's fields as flat query params; without @ParameterObject,
+            // springdoc advertises one nested "query" object that no HTTP caller can send.
+            @ParameterObject @ModelAttribute ProductSearchRequestDto query){
         // Clamp at the web boundary: the cache key inside the service is built from these
         // numbers, so an unclamped size would fragment the cache over identical result sets.
         query.setSize(Pagination.clampSize(query.getSize()));
@@ -119,7 +125,7 @@ public class ProductController {
     @Operation(summary="Get Products by category name",
                description="Every product whose category name matches, case-insensitively. Where two "
                            + "categories share a name (Men/Denim and Women/Denim) both are included; use "
-                           + "/search?categorySlug= for an exact branch. Public."
+                           + "/search?categorySlug= for an exact branch. Unpublished drafts are excluded. Public."
     )
     @GetMapping("/by-category/{categoryName}")
     public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> findProductsByCategory(
@@ -133,7 +139,8 @@ public class ProductController {
 
     @Operation(summary="Get a product by slug",
                description="The product detail page route. A slug is stable across renames, which is why "
-                           + "storefront URLs and the seeded catalogue use it instead of the numeric id. Public."
+                           + "storefront URLs and the seeded catalogue use it instead of the numeric id. "
+                           + "An unpublished draft is reported as 404. Public."
     )
     @GetMapping("/slug/{slug}")
     public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductBySlug(@PathVariable String slug){
@@ -144,7 +151,7 @@ public class ProductController {
     @Operation(summary="List a product's variants",
                description="Every size and colour the product is sold in, with per-variant stock and price. "
                            + "Already included in /{id}/details; this is the lighter call for a PDP variant "
-                           + "picker. Public."
+                           + "picker. An unpublished draft is reported as 404. Public."
     )
     @GetMapping("/{id}/variants")
     public ResponseEntity<ApiResponse<List<GetVariantResponseDto>>> getVariants(@PathVariable Long id){

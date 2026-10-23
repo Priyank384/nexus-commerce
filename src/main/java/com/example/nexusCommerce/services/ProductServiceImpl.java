@@ -69,7 +69,9 @@ public class ProductServiceImpl implements ProductService {
     @Cacheable(cacheNames = PRODUCT_ALL, key = "#page + ':' + #size", sync = true)
     @Override
     public PageResponse<GetProductResponseDto> getAllProducts(int page, int size) {
-        Page<Product> products = productRepository.findAll(Pagination.of(page, size));
+        // Active-only: the public list must not leak an unpublished draft. The entity graph
+        // loads each row's category so mapping does not trigger a lazy load per product.
+        Page<Product> products = productRepository.findByIsActiveTrue(Pagination.of(page, size));
         return PageResponse.of(products, productAdapter::mapToGetProductResponseDto);
     }
 
@@ -77,21 +79,30 @@ public class ProductServiceImpl implements ProductService {
     @Cacheable(cacheNames = PRODUCT_BY_ID, key = "#id")
     @Override
     public GetProductResponseDto getProductById(Long id){
-        return productRepository.findById(id)
-                .map(productAdapter::mapToGetProductResponseDto)
+        Product product = productRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
+        requirePublished(product, "Product with id: " + id + " Not Found!");
+        return productAdapter.mapToGetProductResponseDto(product);
     }
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = PRODUCT_DETAILS, key = "#id")
     @Override
     public GetProductWithDetailsResponseDto getProductWithDetailsById(Long id){
-        Product product = productRepository.findProductWithDetailsById(id)
-                .stream()
-                .findFirst()
-                .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
-
+        Product product = loadProductDetails(id);
+        requirePublished(product, "Product with id: " + id + " Not Found!");
         return mapWithVariants(product);
+    }
+
+    /**
+     * Draft-safe read for the admin editor. Unlike the public read it must resolve an
+     * unpublished product, and admin traffic is small enough that sharing the published
+     * cache key is not worth caching a shape the storefront must never serve.
+     */
+    @Transactional(readOnly = true)
+    @Override
+    public GetProductWithDetailsResponseDto getProductWithDetailsForAdmin(Long id){
+        return mapWithVariants(loadProductDetails(id));
     }
 
     /**
@@ -105,9 +116,11 @@ public class ProductServiceImpl implements ProductService {
         if (slug == null || slug.isBlank()) {
             throw new InvalidRequestException("Product slug must not be blank!");
         }
-        Product product = productRepository.findBySlugIgnoreCase(slug.trim())
+        String trimmed = slug.trim();
+        Product product = productRepository.findBySlugIgnoreCase(trimmed)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Product with slug '" + slug.trim() + "' Not Found!"));
+                        "Product with slug '" + trimmed + "' Not Found!"));
+        requirePublished(product, "Product with slug '" + trimmed + "' Not Found!");
         return mapWithVariants(product);
     }
 
@@ -225,6 +238,7 @@ public class ProductServiceImpl implements ProductService {
     public List<GetVariantResponseDto> getVariants(Long productId) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + productId + " Not Found!"));
+        requirePublished(product, "Product with id: " + productId + " Not Found!");
         return productAdapter.mapToGetVariantResponseDtoList(
                 variantRepository.findByProductIdOrderBySizeAscColorNameAsc(productId), product.getPrice());
     }
@@ -363,7 +377,9 @@ public class ProductServiceImpl implements ProductService {
             }
             product.setPrice(requestDto.getPrice());
         }
-        if (requestDto.getCompareAtPrice() != null) {
+        if (Boolean.TRUE.equals(requestDto.getClearCompareAtPrice())) {
+            product.setCompareAtPrice(null);
+        } else if (requestDto.getCompareAtPrice() != null) {
             if (requestDto.getCompareAtPrice().signum() < 0) {
                 throw new InvalidRequestException("Compare-at price must not be negative!");
             }
@@ -508,7 +524,7 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Category with name '" + category.trim() + "' Not Found!"));
 
-        Page<Product> products = productRepository.findByCategory_NameIgnoreCase(
+        Page<Product> products = productRepository.findByCategory_NameIgnoreCaseAndIsActiveTrue(
                 category.trim(), Pagination.of(page, size));
         return PageResponse.of(products, productAdapter::mapToGetProductWithDetailsResponseDto);
     }
@@ -528,6 +544,23 @@ public class ProductServiceImpl implements ProductService {
         return productAdapter.mapToGetProductWithDetailsResponseDto(product,
                 variantRepository.findByProductIdOrderBySizeAscColorNameAsc(product.getId()),
                 imageRepository.findByProductIdOrderByPositionAsc(product.getId()));
+    }
+
+    private Product loadProductDetails(Long id) {
+        return productRepository.findProductWithDetailsById(id)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Product with id: " + id + " Not Found!"));
+    }
+
+    /**
+     * A draft has to behave as if it does not exist on every public read. Hiding it from the
+     * listing alone still left it reachable by id and by its predictable slug.
+     */
+    private static void requirePublished(Product product, String notFoundMessage) {
+        if (!Boolean.TRUE.equals(product.getIsActive())) {
+            throw new ResourceNotFoundException(notFoundMessage);
+        }
     }
 
     private static String trimToNull(String value) {

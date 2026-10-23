@@ -80,7 +80,8 @@ public class ProductRepositoryTest {
 
     @Test
     void findByCategoryNameIgnoreCase_whenCategoryMatches_returnsProducts() {
-        List<Product> result = productRepository.findByCategory_NameIgnoreCase("electronics", Pageable.unpaged()).getContent();
+        List<Product> result = productRepository
+                .findByCategory_NameIgnoreCaseAndIsActiveTrue("electronics", Pageable.unpaged()).getContent();
 
         assertEquals(2, result.size());
         assertTrue(result.stream().anyMatch(p -> "Phone".equals(p.getTitle())));
@@ -88,8 +89,54 @@ public class ProductRepositoryTest {
     }
 
     @Test
+    void findByCategoryNameIgnoreCase_excludesUnpublishedProducts() {
+        deactivate(persistProduct("Hidden Phone", electronicsCategory));
+
+        List<Product> result = productRepository
+                .findByCategory_NameIgnoreCaseAndIsActiveTrue("electronics", Pageable.unpaged()).getContent();
+
+        assertEquals(List.of("Laptop", "Phone"), titles(result));
+    }
+
+    @Test
+    void findByIsActiveTrue_hidesUnpublishedProducts() {
+        deactivate(laptop);
+
+        assertEquals(List.of("Phone"),
+                titles(productRepository.findByIsActiveTrue(Pageable.unpaged()).getContent()));
+    }
+
+    @Test
+    void searchForAdmin_includesDraftsAndFiltersOnKeyword() {
+        deactivate(laptop);
+
+        assertEquals(List.of("Laptop", "Phone"),
+                titles(productRepository.searchForAdmin(null, null, Pageable.unpaged()).getContent()));
+        assertEquals(List.of("Laptop"),
+                titles(productRepository.searchForAdmin("%laptop%", null, Pageable.unpaged()).getContent()));
+        assertEquals(List.of("Laptop", "Phone"),
+                titles(productRepository.searchForAdmin("%electronics%", null, Pageable.unpaged()).getContent()));
+    }
+
+    @Test
+    void searchForAdmin_outOfStockCeilingKeepsOnlyZeroStockProducts() {
+        // Both fixtures start at the zero default, so the ceiling is the only filter in play.
+        assertEquals(List.of("Laptop", "Phone"),
+                titles(productRepository.searchForAdmin(null, 0, Pageable.unpaged()).getContent()));
+
+        phone.setStock(4);
+        testEntityManager.merge(phone);
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        assertEquals(List.of("Laptop"),
+                titles(productRepository.searchForAdmin(null, 0, Pageable.unpaged()).getContent()));
+    }
+
+    @Test
     void findByCategoryNameIgnoreCase_whenCategoryDoesNotMatch_returnsEmptyList() {
-        List<Product> result = productRepository.findByCategory_NameIgnoreCase("Books", Pageable.unpaged()).getContent();
+        List<Product> result = productRepository
+                .findByCategory_NameIgnoreCaseAndIsActiveTrue("Books", Pageable.unpaged()).getContent();
 
         assertTrue(result.isEmpty());
     }
@@ -185,11 +232,10 @@ public class ProductRepositoryTest {
 
     @Test
     void search_neverReturnsUnpublishedProducts() {
-        laptop.setIsActive(false);
-        testEntityManager.flush();
-        testEntityManager.clear();
+        deactivate(laptop);
 
-        assertEquals(List.of("Phone"), titles(search("phone")));
+        // "a" appears in both titles/descriptions, so only the active flag can exclude Laptop.
+        assertEquals(List.of("Phone"), titles(search("a")));
     }
 
     @Test
@@ -244,6 +290,17 @@ public class ProductRepositoryTest {
                 .rating(BigDecimal.valueOf(4.3))
                 .category(category)
                 .build());
+    }
+
+    /**
+     * setUp clears the persistence context, so an entity it created is detached; a plain setter
+     * would never reach the database. Merge first, then clear so the queries see the new state.
+     */
+    private void deactivate(Product product) {
+        product.setIsActive(false);
+        testEntityManager.merge(product);
+        testEntityManager.flush();
+        testEntityManager.clear();
     }
 
     private void persistVariant(Product product, String size, String colorName) {

@@ -23,6 +23,8 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,15 +77,21 @@ public class OrderServiceImpl implements OrderService {
     @Cacheable(cacheNames = ORDER_ALL, key = "#page + ':' + #size", sync = true)
     @Override
     public PageResponse<GetOrderResponseDto> getAllOrders(int page, int size){
-        Page<Order> orders = orderRepository.findAll(Pagination.of(page, size));
+        // The admin queue and the shopper's history both read newest first; Pagination.of
+        // pins id ascending, so every order list overrides it here.
+        Page<Order> orders = orderRepository.findAll(newestFirst(page, size));
         return pageOfOrders(orders);
     }
 
     @Transactional(readOnly = true)
     @Override
     public PageResponse<GetOrderResponseDto> getOrdersByUserId(Long userId, int page, int size){
-        Page<Order> orders = orderRepository.findByUser_Id(userId, Pagination.of(page, size));
+        Page<Order> orders = orderRepository.findByUser_Id(userId, newestFirst(page, size));
         return pageOfOrders(orders);
+    }
+
+    private PageRequest newestFirst(int page, int size) {
+        return Pagination.of(page, size).withSort(Sort.by(Sort.Direction.DESC, "id"));
     }
 
     private PageResponse<GetOrderResponseDto> pageOfOrders(Page<Order> orders) {

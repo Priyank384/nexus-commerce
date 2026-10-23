@@ -11,7 +11,7 @@ NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("
 - **Auth & roles** — Register (`POST /api/v1/users`), log in (`POST /api/v1/auth/login`), refresh (`POST /api/v1/auth/refresh`) and log out (`POST /api/v1/auth/logout`). Access tokens are stateless **JWT bearer** tokens; refresh tokens are opaque, single-use values stored in Redis with rotation on every refresh. Logging out blacklists the current `jti` in Redis for the rest of its lifetime. Two roles, `USER` and `ADMIN`, gate every endpoint (see [Authentication & roles](#authentication--roles)).
 - **Login rate limiting** — Fixed-window, IP-keyed Redis counter on `POST /api/v1/auth/login` (default **10 / 60 s**, tunable via `LOGIN_RATE_MAX` / `LOGIN_RATE_WINDOW_SECONDS`). Over-limit returns **429** with the standard `ApiResponse` envelope.
 - **Categories** — Create, list (paged), get by id, update, delete, and fetch the whole **`/categories/tree`** in one call (V15 gives categories a `parent_id`, so Men → Tops and Women → Tops are distinct branches). Deleting a category that still holds live products (or children) is rejected.
-- **Products & variants** — CRUD-style operations, fetch with category details, per-product **stock** tracking, and admin image upload (`POST /api/v1/admin/products/{id}/image`) that persists PNG/JPEG/WebP files to disk and rewrites the product's `image` URL to a served path (`/uploads/products/<file>`). Each product carries **size × colour variants** (V16), and **the variant is the unit of stock** — `S/Black` selling out never blocks `M/Black`. Admins manage variants via `POST /products/{id}/variants`, `PUT /products/variants/{variantId}`, `DELETE /products/variants/{variantId}`.
+- **Products & variants** — CRUD-style operations, fetch with category details, per-product **stock** tracking, and an admin image surface: legacy single-image upload (`POST /api/v1/admin/products/{id}/image`) plus a gallery you can append to, delete from and reorder (`/images`, `/images/{imageId}`, `/images/order`). Each product carries **size × colour variants** (V16), and **the variant is the unit of stock** — `S/Black` selling out never blocks `M/Black`. Admins manage variants via `POST /products/{id}/variants`, `PUT /products/variants/{variantId}`, `DELETE /products/variants/{variantId}`.
 - **Faceted search** — `GET /api/v1/products/search` filters by `gender`, `categorySlug` (a parent slug matches its whole subtree), `minPrice`/`maxPrice`, `sizes`, `colors` and sorts by `id`, `price`, `rating`, `createdAt` or `title`. Unknown sort or facet values are rejected with **400** instead of answering with an empty page — which also stops arbitrary strings from minting unbounded cache entries. `GET /products/facets/sizes` and `/facets/colors` publish the filter vocabulary, computed only from the variants of **active, live** products — deactivating or deleting a style takes its sizes and colours out of the facets, so the storefront can never offer a filter that answers with an empty page.
 - **Shopping cart** — Persistent per-user cart (V13, variant-scoped in V22), backed by its own table so state survives closing the browser. Add / update / remove lines, clear, and **checkout** (which converts the cart into an order through the same stock + snapshot pipeline). A line is keyed on `(cart, variant)`, so the same tee in two sizes is two lines.
 - **Wishlists** — Multi-list, per-user (`/api/v1/wishlist`). Create and delete named lists, save a product to the default list or a specific one, remove by product id, all owner-scoped. Saving a product already on the list restates it instead of duplicating.
@@ -306,7 +306,7 @@ The **Access** column below shows the minimum role required.
 | `GET` | `/` | Public | List categories (paged). |
 | `GET` | `/{id}` | Public | Get category by id. |
 | `POST` | `/` | **ADMIN** | Create category (`name`, optional `parentId`). |
-| `PUT` | `/{id}` | **ADMIN** | Update category. |
+| `PUT` | `/{id}` | **ADMIN** | Rename or reparent (`UpdateCategoryRequestDto`): `name` is required; omit `parentId` to keep the current parent; send `moveToTopLevel: true` to detach instead of reparent; optional `description`/`slug`. Cycles and duplicate names → **400**. |
 | `DELETE` | `/{id}` | **ADMIN** | Delete category — rejected if it still has live products **or** subcategories. |
 
 ### Products — `/api/v1/products`
@@ -393,9 +393,11 @@ Owner-scoped; `GET /wishlist` returns the caller's default list with its items.
 | `GET` | `/{id}` | Owner/ADMIN | Get order by id (only if you own it or are admin). |
 | `GET` | `/{id}/summary` | Owner/ADMIN | Order summary DTO (aggregated totals from line items). |
 | `PUT` | `/{id}` | Owner/ADMIN | Update order (`UpdateOrderRequestDto`: `status`, `orderItems` actions `ADD`/`REMOVE`/`INCREMENT`/`DECREMENT`). Blocked on `DELIVERED`/`CANCELLED`. |
-| `GET` | `/` | **ADMIN** | List all orders (paged). |
-| `GET` | `/user/{userId}` | Owner/ADMIN | Orders for a user (paged). |
+| `GET` | `/` | **ADMIN** | List all orders (paged, newest first). |
+| `GET` | `/user/{userId}` | Owner/ADMIN | Orders for a user (paged, newest first). |
 | `DELETE` | `/{id}` | **ADMIN** | Delete order; returns reserved stock and soft-deletes its line items. |
+
+> **Order authority.** An owner may edit line items only while the order is `PENDING` and **unpaid**; status changes and any edit to a `PAID` order require `ROLE_ADMIN`. The only legal moves are `PENDING → SHIPPED → DELIVERED` and `PENDING → CANCELLED`; `DELIVERED` and `CANCELLED` are terminal. Cancelling returns each line's quantity to stock exactly once, and a **paid** cancellation needs a manual refund in Razorpay — the API records the status change but does not move money.
 
 ### Reviews — `/api/v1/reviews`
 
@@ -415,11 +417,16 @@ All endpoints below require `ROLE_ADMIN`.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/metrics` | Business metrics (`AdminMetricsResponseDto`: totals for users/products/categories/orders/reviews, `totalRevenue`, `ordersByStatus`, `outOfStockProducts`). |
-| `GET` | `/users` | List users (paged). |
+| `GET` | `/products` | Paged catalogue for the admin table, newest first. Includes unpublished drafts. `q` matches title/brand/material/category; `outOfStock=true` keeps only styles whose aggregate stock is zero — the same predicate as the dashboard metric. |
+| `GET` | `/products/{id}` | Editor read of a product, including drafts and its variants/gallery. |
+| `GET` | `/users` | List users (paged, newest first). `q` matches name or email. |
 | `GET` | `/users/{id}` | Get a user. |
 | `PATCH` | `/users/{id}` | Update a user's `role` and/or `enabled` (last-active-admin can't be disabled). |
 | `PUT` | `/products/{id}/stock` | Set a product's stock (`SetStockRequestDto`: `stock` ≥ 0). **400 for a product with more than one variant** — restock those per variant. |
 | `POST` | `/products/{id}/image` | Multipart upload (`file`) — PNG/JPEG/WebP up to 5 MB. Writes under `UPLOAD_DIR` with a UUID filename, updates `product.image` to `/uploads/products/<file>` and returns the URL as the `data` field. |
+| `POST` | `/products/{id}/images` | Append a multipart `file` to the product's gallery, after the current last position. Returns the new `GetProductImageResponseDto`. |
+| `DELETE` | `/products/{id}/images/{imageId}` | Soft-delete a gallery row, close the position gap and return the remaining ordered gallery. The file stays on disk so order snapshots keep resolving. |
+| `PUT` | `/products/{id}/images/order` | Reorder the gallery (`{ "imageIds": [...] }` — every live image id exactly once). Position 0 is the card thumbnail. |
 
 ### Actuator — `/actuator`
 

@@ -765,8 +765,25 @@ Send the request with `Authorization: Bearer <current-access-token>`. Response h
 **Body (`CreateCategoryRequestDto`):**
 
 ```json
-{ "name": "Electronics" }
+{ "name": "Electronics", "parentId": null }
 ```
+
+**Body (`UpdateCategoryRequestDto`)** — `name` is required; omit `parentId` to keep the current parent, or send `moveToTopLevel` to detach. A request carrying both `parentId` and `moveToTopLevel: true` is a **400**, as is a move under the category's own descendant:
+
+```json
+{
+  "name": "Electronics",
+  "parentId": 4,
+  "description": "Devices and accessories",
+  "slug": "electronics"
+}
+```
+
+```json
+{ "name": "Electronics", "moveToTopLevel": true }
+```
+
+`DELETE` is refused while the category still has live products **or** subcategories.
 
 ### 12.4 Products — `/api/v1/products`
 
@@ -928,6 +945,15 @@ Empty cart → `400 InvalidRequestException`. Insufficient stock → `400`, cart
 - `action` (`OrderItemAction`): `ADD`, `REMOVE`, `INCREMENT`, `DECREMENT`
 - `status` (`OrderStatus`): `PENDING`, `SHIPPED`, `DELIVERED`, `CANCELLED`
 
+**Authority and the status machine.** An owner may edit line items only while the order is
+`PENDING` **and unpaid**; status changes and any edit to a `PAID` order require `ROLE_ADMIN`.
+The only legal moves are `PENDING → SHIPPED → DELIVERED` and `PENDING → CANCELLED` — every
+other transition is a **400**. `DELIVERED` and `CANCELLED` are terminal. Cancelling restores
+each line's quantity to stock exactly once; a **paid** cancellation still needs a manual refund
+in Razorpay, because the status change does not move money.
+
+Every order list (`/`, `/me`, `/user/{userId}`) pages **newest first** (descending id).
+
 Line items in the response are rendered from the stored snapshots (`productName`, `productPrice` = unit price, `subTotal` = unit price × qty).
 
 > The `GET` order endpoints (`/me`, `/{id}`, `/{id}/summary`, `/user/{userId}`, `/`) have **no body** — just the path id and optional `page`/`size`. `POST` and `PUT` bodies are shown above.
@@ -970,11 +996,16 @@ initial, e.g. `"Asha R."` — instead of exposing the reviewer's full account.
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
 | GET | `/metrics` | — | `AdminMetricsResponseDto`: totals (users/products/categories/orders/reviews), `totalRevenue`, `ordersByStatus`, `outOfStockProducts` |
-| GET | `/users` | page/size | List users |
+| GET | `/products` | page/size, `q`, `outOfStock` | Admin catalogue, newest first, **drafts included**. `q` matches title/brand/material/category; `outOfStock=true` keeps aggregate stock ≤ 0 (same predicate as the metric) |
+| GET | `/products/{id}` | — | Editor read of a product with variants and gallery; drafts are readable here |
+| GET | `/users` | page/size, `q` | List users, newest first; `q` matches name or email |
 | GET | `/users/{id}` | — | Get a user |
 | PATCH | `/users/{id}` | `UpdateUserRequestDto` | Update role/enabled (last-active-admin can't be disabled) |
-| PUT | `/products/{id}/stock` | `SetStockRequestDto` | Set a product's stock |
+| PUT | `/products/{id}/stock` | `SetStockRequestDto` | Set a product's stock; **400** when it has more than one variant |
 | POST | `/products/{id}/image` | multipart `file` (≤ 5 MB, PNG/JPEG/WebP) | Store image, rewrite `product.image`, return the URL |
+| POST | `/products/{id}/images` | multipart `file` | Append to the gallery after the last position; returns the new image row |
+| DELETE | `/products/{id}/images/{imageId}` | — | Soft-delete a gallery row, close the gap, return the ordered remainder |
+| PUT | `/products/{id}/images/order` | `{ "imageIds": [9, 4, 7] }` | Reorder the gallery; position 0 is the card thumbnail |
 
 **PATCH body (`UpdateUserRequestDto`)** — either or both fields:
 
@@ -1397,7 +1428,7 @@ Regenerate after any controller change. The backend's Swagger/OpenAPI setup (§2
 
 ### 18.4 Product images
 
-Uploaded images (`POST /api/v1/admin/products/{id}/image`, §12.6) are served from `${app.upload.dir}` mounted at `/uploads/**` on Spring. The frontend rewrites `/uploads/:path*` → `${API_BASE_URL}/uploads/:path*` in `next.config.ts`, so product cards can render `product.image` (`/uploads/products/<uuid>.png`) without leaking the backend origin.
+Uploaded images (`POST /api/v1/admin/products/{id}/image` and the gallery endpoints in §12.8) are served from `${app.upload.dir}` mounted at `/uploads/**` on Spring. The frontend rewrites `/uploads/:path*` → `${API_BASE_URL}/uploads/:path*` in `next.config.ts`, so product cards can render `product.image` (`/uploads/products/<uuid>.png`) without leaking the backend origin.
 
 ### 18.5 Boot order for local dev
 

@@ -17,6 +17,11 @@ import com.example.nexusCommerce.schema.ProductVariant;
 @Component
 public class ProductAdapter {
 
+    /**
+     * Requires the product's category to be initialised: reading the name on a lazy proxy
+     * outside a transaction throws. Every caller either runs inside a transaction or loaded
+     * the row with a category fetch join (see {@code ProductRepository.findByIsActiveTrue}).
+     */
     public GetProductResponseDto mapToGetProductResponseDto(Product product) {
         return GetProductResponseDto.builder()
                 .id(product.getId())
@@ -30,6 +35,9 @@ public class ProductAdapter {
                 .slug(product.getSlug())
                 .brand(product.getBrand())
                 .compareAtPrice(product.getCompareAtPrice())
+                .category(product.getCategory().getName())
+                .categoryId(product.getCategory().getId())
+                .isActive(product.getIsActive())
                 .build();
     }
 

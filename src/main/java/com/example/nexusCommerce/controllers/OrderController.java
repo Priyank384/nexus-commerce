@@ -44,7 +44,7 @@ public class OrderController {
     private static final String IDEM_SCOPE = "orders";
 
     @Operation(summary = "List all orders",
-               description = "Paged list across all users. Requires ROLE_ADMIN.")
+               description = "Paged list across all users, newest first. Requires ROLE_ADMIN.")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<GetOrderResponseDto>>> getAllOrders(
             @RequestParam(name = "page", defaultValue = "0") int page,
@@ -100,7 +100,7 @@ public class OrderController {
     }
 
     @Operation(summary = "List orders for a user",
-               description = "Owner or ROLE_ADMIN only. Paged.")
+               description = "Owner or ROLE_ADMIN only. Paged newest first.")
     @GetMapping("/user/{userId}")
     public ResponseEntity<ApiResponse<PageResponse<GetOrderResponseDto>>> getOrdersByUser(
             @PathVariable Long userId,
@@ -116,7 +116,7 @@ public class OrderController {
     }
 
     @Operation(summary = "List my orders",
-               description = "Paged orders belonging to the authenticated caller.")
+               description = "Paged orders belonging to the authenticated caller, newest first.")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<PageResponse<GetOrderResponseDto>>> getMyOrders(
             @RequestParam(name = "page", defaultValue = "0") int page,

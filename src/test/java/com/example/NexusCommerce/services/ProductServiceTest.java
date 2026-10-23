@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
@@ -93,25 +95,28 @@ class ProductServiceTest {
 
     @Test
     void getAllProducts_mapsPageOfProductsToDtos() {
-        when(productRepository.findAll(any(Pageable.class))).thenReturn(page(List.of(sampleProduct())));
+        when(productRepository.findByIsActiveTrue(any(Pageable.class)))
+                .thenReturn(page(List.of(sampleProduct())));
 
         PageResponse<GetProductResponseDto> result = productService.getAllProducts(0, 20);
 
         assertEquals(1, result.getContent().size());
         assertEquals("iPhone", result.getContent().get(0).getTitle());
         assertEquals(BigDecimal.valueOf(80000), result.getContent().get(0).getPrice());
+        assertEquals("Electronics", result.getContent().get(0).getCategory());
+        assertTrue(result.getContent().get(0).getIsActive());
         assertEquals(1, result.getTotalElements());
         assertTrue(result.isLast());
     }
 
     @Test
     void getAllProducts_clampsOversizedPageRequest() {
-        when(productRepository.findAll(any(Pageable.class))).thenReturn(page(List.of()));
+        when(productRepository.findByIsActiveTrue(any(Pageable.class))).thenReturn(page(List.of()));
 
         productService.getAllProducts(0, 100_000);
 
         ArgumentCaptor<Pageable> captor = ArgumentCaptor.forClass(Pageable.class);
-        verify(productRepository).findAll(captor.capture());
+        verify(productRepository).findByIsActiveTrue(captor.capture());
         assertEquals(Pagination.MAX_SIZE, captor.getValue().getPageSize());
     }
 
@@ -132,6 +137,15 @@ class ProductServiceTest {
     }
 
     @Test
+    void getProductById_hidesAnUnpublishedDraft() {
+        Product draft = sampleProduct();
+        draft.setIsActive(false);
+        when(productRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+        assertThrows(ResourceNotFoundException.class, () -> productService.getProductById(1L));
+    }
+
+    @Test
     void getProductWithDetailsById_returnsProductWithCategory() {
         when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of(sampleProduct()));
 
@@ -139,6 +153,46 @@ class ProductServiceTest {
 
         assertEquals("iPhone", result.getTitle());
         assertEquals("Electronics", result.getCategory());
+    }
+
+    @Test
+    void getProductWithDetailsById_hidesAnUnpublishedDraft() {
+        Product draft = sampleProduct();
+        draft.setIsActive(false);
+        when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of(draft));
+
+        assertThrows(ResourceNotFoundException.class, () -> productService.getProductWithDetailsById(1L));
+    }
+
+    @Test
+    void getProductWithDetailsForAdmin_returnsAnUnpublishedDraft() {
+        Product draft = sampleProduct();
+        draft.setIsActive(false);
+        when(productRepository.findProductWithDetailsById(1L)).thenReturn(List.of(draft));
+
+        GetProductWithDetailsResponseDto result = productService.getProductWithDetailsForAdmin(1L);
+
+        assertEquals("iPhone", result.getTitle());
+        assertFalse(result.getIsActive());
+    }
+
+    @Test
+    void getProductBySlug_hidesAnUnpublishedDraft() {
+        Product draft = sampleProduct();
+        draft.setIsActive(false);
+        draft.setSlug("organic-tee");
+        when(productRepository.findBySlugIgnoreCase("organic-tee")).thenReturn(Optional.of(draft));
+
+        assertThrows(ResourceNotFoundException.class, () -> productService.getProductBySlug("organic-tee"));
+    }
+
+    @Test
+    void getVariants_hidesAnUnpublishedDraft() {
+        Product draft = sampleProduct();
+        draft.setIsActive(false);
+        when(productRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+        assertThrows(ResourceNotFoundException.class, () -> productService.getVariants(1L));
     }
 
     @Test
@@ -230,6 +284,35 @@ class ProductServiceTest {
     }
 
     @Test
+    void updateProduct_clearFlagTakesTheProductOffSale() {
+        Product product = sampleProduct();
+        product.setCompareAtPrice(BigDecimal.valueOf(90000));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+
+        productService.updateProduct(1L, UpdateProductRequestDto.builder()
+                .clearCompareAtPrice(true)
+                .build());
+
+        assertNull(product.getCompareAtPrice());
+    }
+
+    @Test
+    void updateProduct_clearFlagWinsOverASuppliedCompareAt() {
+        Product product = sampleProduct();
+        product.setCompareAtPrice(BigDecimal.valueOf(90000));
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+
+        productService.updateProduct(1L, UpdateProductRequestDto.builder()
+                .compareAtPrice(BigDecimal.valueOf(95000))
+                .clearCompareAtPrice(true)
+                .build());
+
+        assertNull(product.getCompareAtPrice());
+    }
+
+    @Test
     void updateProduct_rejectsARatingAboveTheFiveStarScale() {
         Product product = sampleProduct();
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
@@ -312,7 +395,8 @@ class ProductServiceTest {
     void findByCategory_returnsTrimmedLookupWithCategoryNames() {
         when(categoryRepository.findFirstByNameIgnoreCaseOrderByIdAsc("Electronics"))
                 .thenReturn(Optional.of(Category.builder().name("Electronics").build()));
-        when(productRepository.findByCategory_NameIgnoreCase(eq("Electronics"), any(Pageable.class)))
+        when(productRepository.findByCategory_NameIgnoreCaseAndIsActiveTrue(
+                eq("Electronics"), any(Pageable.class)))
                 .thenReturn(page(List.of(sampleProduct())));
 
         PageResponse<GetProductWithDetailsResponseDto> result =

@@ -21,7 +21,46 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
     // Fetch-join the category so the read model can map product+category without a
     // per-row lazy load (1 + N queries). Safe with pagination because the association is to-one.
     @EntityGraph(attributePaths = "category")
-    Page<Product> findByCategory_NameIgnoreCase(String categoryName, Pageable pageable);
+    Page<Product> findByCategory_NameIgnoreCaseAndIsActiveTrue(String categoryName, Pageable pageable);
+
+    /**
+     * Public catalogue listing. Unlike a plain {@link #findAll(Pageable)} this never exposes an
+     * unpublished draft, and the fetch join keeps the response mapping from lazy-loading a
+     * category per row.
+     */
+    @EntityGraph(attributePaths = "category")
+    Page<Product> findByIsActiveTrue(Pageable pageable);
+
+    /**
+     * Admin catalogue listing. Unlike the storefront search this includes drafts, because a
+     * product that is invisible in the admin table cannot be published from it. The keyword
+     * arrives already sanitised and wrapped as a LIKE pattern; null means "no filter".
+     *
+     * <p>{@code maxStock} keeps the same comparison as the dashboard metric
+     * ({@code stock <= 0}), so the "out of stock" count and the filtered list agree. Null
+     * means "no stock filter".
+     */
+    @Query(value = """
+            SELECT p FROM Product p
+            JOIN FETCH p.category c
+            WHERE (:keyword IS NULL OR LOWER(p.title) LIKE :keyword
+                 OR LOWER(p.brand) LIKE :keyword
+                 OR LOWER(p.material) LIKE :keyword
+                 OR LOWER(c.name) LIKE :keyword)
+              AND (:maxStock IS NULL OR p.stock <= :maxStock)
+            """,
+        countQuery = """
+            SELECT COUNT(p) FROM Product p
+            JOIN p.category c
+            WHERE (:keyword IS NULL OR LOWER(p.title) LIKE :keyword
+                 OR LOWER(p.brand) LIKE :keyword
+                 OR LOWER(p.material) LIKE :keyword
+                 OR LOWER(c.name) LIKE :keyword)
+              AND (:maxStock IS NULL OR p.stock <= :maxStock)
+            """)
+    Page<Product> searchForAdmin(@Param("keyword") String keyword,
+                                 @Param("maxStock") Integer maxStock,
+                                 Pageable pageable);
 
     boolean existsByTitleIgnoreCase(String name);
 
