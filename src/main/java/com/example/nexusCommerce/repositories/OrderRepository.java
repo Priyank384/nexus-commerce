@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,12 @@ import com.example.nexusCommerce.schema.PaymentStatus;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
+    // The response names the customer, so the user must ride along or every row in a page
+    // would trigger its own lookup.
+    @EntityGraph(attributePaths = "user")
+    Page<Order> findAll(Pageable pageable);
+
+    @EntityGraph(attributePaths = "user")
     Page<Order> findByUser_Id(Long userId, Pageable pageable);
 
     /**

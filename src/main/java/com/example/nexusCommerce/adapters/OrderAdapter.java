@@ -30,6 +30,8 @@ public class OrderAdapter {
         return GetOrderResponseDto.builder()
                 .id(order.getId())
                 .userId(order.getUser().getId())
+                .customerName(order.getUser().getName())
+                .customerEmail(order.getUser().getEmail())
                 .orderStatus(order.getStatus())
                 .totalPrice(totalOf(orderProducts))
                 .paymentStatus(order.getPaymentStatus())

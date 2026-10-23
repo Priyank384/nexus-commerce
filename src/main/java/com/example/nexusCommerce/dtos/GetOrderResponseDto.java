@@ -20,6 +20,9 @@ public class GetOrderResponseDto {
     
     private Long id;
     private Long userId;
+    /** Who placed it — the admin order table has no other way to name a customer. */
+    private String customerName;
+    private String customerEmail;
     private OrderStatus orderStatus;
     // Derived from the line-item snapshots, so it can never disagree with the items shown
     // underneath it.

@@ -11,7 +11,8 @@ public interface OrderService {
     PageResponse<GetOrderResponseDto> getOrdersByUserId(Long userId, int page, int size);
     GetOrderResponseDto getOrderById(Long id);
     GetOrderResponseDto createOrder(CreateOrderRequestDto createOrderRequestDto, Long authenticatedUserId);
-    GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto);
+    GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto,
+            Long callerId, boolean callerIsAdmin);
     GetOrderSummaryResponseDto getOrderSummary(Long id);
     void deleteOrder(Long id);
 }

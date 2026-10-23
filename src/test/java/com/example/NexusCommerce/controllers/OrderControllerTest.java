@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
@@ -107,7 +108,7 @@ public class OrderControllerTest {
         UpdateOrderRequestDto request = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
 
         assertThrows(ForbiddenException.class, () -> controller.updateOrder(50L, request, user(7L)));
-        verify(orderService, never()).updateOrder(anyLong(), any());
+        verify(orderService, never()).updateOrder(anyLong(), any(), anyLong(), anyBoolean());
     }
 
     @Test

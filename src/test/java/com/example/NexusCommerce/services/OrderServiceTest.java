@@ -13,7 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -50,6 +52,7 @@ import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderItemAction;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
+import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
@@ -128,7 +131,7 @@ class OrderServiceTest {
     }
 
     private Order sampleOrder() {
-        Order order = Order.builder().status(OrderStatus.PENDING).build();
+        Order order = Order.builder().status(OrderStatus.PENDING).user(sampleUser()).build();
         order.setId(1L);
         return order;
     }
@@ -475,10 +478,100 @@ class OrderServiceTest {
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        GetOrderResponseDto result = orderService.updateOrder(1L, dto);
+        GetOrderResponseDto result = orderService.updateOrder(1L, dto, 1L, true);
 
         assertEquals(OrderStatus.SHIPPED, result.getOrderStatus());
         verify(orderRepository).save(order);
+    }
+
+    @Test
+    void updateOrder_ownerChangingStatus_isForbidden() {
+        Order order = sampleOrder();
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 1L, false));
+        verify(orderRepository, never()).save(order);
+    }
+
+    @Test
+    void updateOrder_ownerEditingPaidOrder_isForbidden() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
+                .orderItems(List.of(OrderItemActionDto.builder()
+                        .productId(1L)
+                        .action(OrderItemAction.REMOVE)
+                        .build()))
+                .build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 1L, false));
+        verify(productRepository, never()).findAllById(anyList());
+    }
+
+    @Test
+    void updateOrder_adminEditingPaidOrder_isAllowed() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        orderService.updateOrder(1L, dto, 99L, true);
+
+        assertEquals(OrderStatus.SHIPPED, order.getStatus());
+    }
+
+    @Test
+    void updateOrder_skippingStraightToDelivered_isRejected() {
+        Order order = sampleOrder();
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.DELIVERED).build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 1L, true));
+        assertEquals(OrderStatus.PENDING, order.getStatus());
+        verify(orderRepository, never()).save(order);
+    }
+
+    @Test
+    void updateOrder_cancellingRestocksEveryLineOnce() {
+        Order order = sampleOrder();
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.CANCELLED).build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderProductsRepository.findStockDeltasByOrderId(1L))
+                .thenReturn(List.<Object[]>of(new Object[] { 11L, 1L, 2 }));
+        givenSingleVariantStock(12);
+
+        orderService.updateOrder(1L, dto, 1L, true);
+
+        verify(variantRepository).increaseStock(11L, 2);
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    void updateOrder_cancelCombinedWithLineEdits_isRejected() {
+        Order order = sampleOrder();
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
+                .status(OrderStatus.CANCELLED)
+                .orderItems(List.of(OrderItemActionDto.builder()
+                        .productId(1L)
+                        .action(OrderItemAction.REMOVE)
+                        .build()))
+                .build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 1L, true));
+        verify(variantRepository, never()).increaseStock(anyLong(), anyInt());
+    }
+
+    @Test
+    void updateOrder_forAnotherUsersOrder_isForbiddenAtTheService() {
+        Order order = sampleOrder();
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 7L, false));
     }
 
     @Test
@@ -501,7 +594,7 @@ class OrderServiceTest {
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(new ArrayList<>());
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        orderService.updateOrder(1L, dto);
+        orderService.updateOrder(1L, dto, 1L, false);
 
         verify(orderProductsRepository).saveAll(anyList());
     }
@@ -527,7 +620,7 @@ class OrderServiceTest {
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        orderService.updateOrder(1L, dto);
+        orderService.updateOrder(1L, dto, 1L, false);
 
         verify(variantRepository).increaseStock(11L, 1);
         verify(orderProductsRepository).deleteAll(List.of(existing));
@@ -555,7 +648,7 @@ class OrderServiceTest {
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        orderService.updateOrder(1L, dto);
+        orderService.updateOrder(1L, dto, 1L, false);
 
         assertEquals(2, existing.getQuantity());
         verify(orderProductsRepository).saveAll(List.of(existing));
@@ -582,7 +675,7 @@ class OrderServiceTest {
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        orderService.updateOrder(1L, dto);
+        orderService.updateOrder(1L, dto, 1L, false);
 
         assertEquals(1, existing.getQuantity());
         verify(orderProductsRepository).saveAll(List.of(existing));
@@ -609,7 +702,7 @@ class OrderServiceTest {
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
-        orderService.updateOrder(1L, dto);
+        orderService.updateOrder(1L, dto, 1L, false);
 
         verify(orderProductsRepository).deleteAll(List.of(existing));
     }
@@ -630,7 +723,7 @@ class OrderServiceTest {
         givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(new ArrayList<>());
 
-        assertThrows(ResourceNotFoundException.class, () -> orderService.updateOrder(1L, dto));
+        assertThrows(ResourceNotFoundException.class, () -> orderService.updateOrder(1L, dto, 1L, false));
     }
 
     @Test

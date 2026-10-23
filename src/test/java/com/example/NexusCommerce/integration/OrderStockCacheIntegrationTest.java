@@ -137,7 +137,7 @@ class OrderStockCacheIntegrationTest {
         when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
         when(orderAdapter.mapToGetOrderResponseDto(any(), anyList())).thenReturn(null);
 
-        orderService.updateOrder(1L, UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build());
+        orderService.updateOrder(1L, UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build(), 1L, true);
 
         assertProductReadModelsEvicted();
     }

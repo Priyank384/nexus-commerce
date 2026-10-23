@@ -48,6 +48,7 @@ import com.example.nexusCommerce.schema.AddressSnapshot;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.OrderStatus;
+import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
@@ -125,14 +126,7 @@ public class OrderServiceImpl implements OrderService {
         Order order = orderRepository.findById(id)
                         .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
         assertModifiable(order);
-        // Scalar projection instead of managed line items: an OrderProducts still in the
-        // persistence context when the Order is soft-deleted makes the commit cascade
-        // validation see the removed Order as transient and throw.
-        Set<Long> touchedProducts = new HashSet<>();
-        for (Object[] row : orderProductsRepository.findStockDeltasByOrderId(id)) {
-            returnStock((Long) row[0], (Long) row[1], (Integer) row[2], touchedProducts);
-        }
-        resyncProductStock(touchedProducts);
+        restockOrder(id);
         orderProductsRepository.softDeleteByOrderId(id);
         orderRepository.delete(order);
     }
@@ -214,14 +208,19 @@ public class OrderServiceImpl implements OrderService {
             @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true)
     })
     @Override
-    public GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto){
+    public GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto,
+            Long callerId, boolean callerIsAdmin){
         Order order = orderRepository.findById(id).orElseThrow(()-> new ResourceNotFoundException("Order not found with id " + id));
         assertModifiable(order);
+        assertMayMutate(order, updateOrderRequestDto, callerId, callerIsAdmin);
 
-        if(updateOrderRequestDto.getStatus()!=null){
-            order.setStatus(updateOrderRequestDto.getStatus());
-            orderRepository.save(order);
+        OrderStatus requestedStatus = updateOrderRequestDto.getStatus();
+        if (requestedStatus == OrderStatus.CANCELLED
+                && updateOrderRequestDto.getOrderItems() != null
+                && !updateOrderRequestDto.getOrderItems().isEmpty()) {
+            throw new InvalidRequestException("Cancel the order in its own request; line edits cannot ride along");
         }
+
         Map<String, OrderProducts> existingItems = null;
         if(updateOrderRequestDto.getOrderItems()!= null){
             List<Long> productIds = updateOrderRequestDto.getOrderItems().stream()
@@ -330,6 +329,10 @@ public class OrderServiceImpl implements OrderService {
             resyncProductStock(touchedProducts);
         }
 
+        if (requestedStatus != null) {
+            applyStatusChange(order, requestedStatus);
+        }
+
         // existingItems already reflects the post-mutation state with products resolved,
         // so responding costs no extra query; only a status-only update needs to read.
         List<OrderProducts> currentItems = updateOrderRequestDto.getOrderItems() != null
@@ -411,6 +414,67 @@ public class OrderServiceImpl implements OrderService {
 
     private static String lineKey(Long productId, Long variantId) {
         return productId + ":" + variantId;
+    }
+
+    /**
+     * A shopper owns only the pre-payment phase: status is fulfilment state, and a paid
+     * order's lines are what the money bought. Both are left to an administrator, otherwise
+     * a buyer could mark their own parcel delivered or add goods after paying for less.
+     */
+    private void assertMayMutate(Order order, UpdateOrderRequestDto requestDto,
+            Long callerId, boolean callerIsAdmin) {
+        if (callerId == null) {
+            throw new ForbiddenException("You can only modify your own orders");
+        }
+        boolean owner = order.getUser() != null && callerId.equals(order.getUser().getId());
+        if (!callerIsAdmin && !owner) {
+            throw new ForbiddenException("You can only modify your own orders");
+        }
+        if (callerIsAdmin) {
+            return;
+        }
+        if (requestDto.getStatus() != null && requestDto.getStatus() != order.getStatus()) {
+            throw new ForbiddenException("Only an administrator can change an order's status");
+        }
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new ForbiddenException("A paid order can no longer be edited");
+        }
+    }
+
+    /**
+     * Fulfilment moves forward only. Cancellation returns the reserved stock exactly once —
+     * the order then becomes terminal, so a repeated cancel cannot restock it twice.
+     */
+    private void applyStatusChange(Order order, OrderStatus next) {
+        OrderStatus current = order.getStatus();
+        if (current == next) {
+            return;
+        }
+        boolean allowed = (current == OrderStatus.PENDING
+                    && (next == OrderStatus.SHIPPED || next == OrderStatus.CANCELLED))
+                || (current == OrderStatus.SHIPPED && next == OrderStatus.DELIVERED);
+        if (!allowed) {
+            throw new InvalidRequestException(
+                    "Order " + order.getId() + " cannot move from " + current + " to " + next);
+        }
+        if (next == OrderStatus.CANCELLED) {
+            restockOrder(order.getId());
+        }
+        order.setStatus(next);
+        orderRepository.save(order);
+    }
+
+    /**
+     * Scalar projection instead of managed line items: an OrderProducts still in the
+     * persistence context when the Order is soft-deleted makes the commit cascade
+     * validation see the removed Order as transient and throw.
+     */
+    private void restockOrder(Long orderId) {
+        Set<Long> touchedProducts = new HashSet<>();
+        for (Object[] row : orderProductsRepository.findStockDeltasByOrderId(orderId)) {
+            returnStock((Long) row[0], (Long) row[1], (Integer) row[2], touchedProducts);
+        }
+        resyncProductStock(touchedProducts);
     }
 
     /**

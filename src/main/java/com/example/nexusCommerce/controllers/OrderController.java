@@ -128,7 +128,10 @@ public class OrderController {
     }
 
     @Operation(summary = "Update an order",
-               description = "Owner or ROLE_ADMIN only. Changes status and/or applies ADD/REMOVE/INCREMENT/DECREMENT line-item actions. Blocked once DELIVERED or CANCELLED.")
+               description = "Owner or ROLE_ADMIN only. An owner may apply ADD/REMOVE/INCREMENT/DECREMENT "
+                           + "while the order is PENDING and unpaid; status changes and edits to a PAID order "
+                           + "require ROLE_ADMIN. Status moves PENDING→SHIPPED→DELIVERED or PENDING→CANCELLED, "
+                           + "and cancelling returns the reserved stock. Blocked once DELIVERED or CANCELLED.")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<GetOrderResponseDto>> updateOrder(
             @PathVariable Long id, @Valid @RequestBody UpdateOrderRequestDto requestDto,
@@ -136,7 +139,9 @@ public class OrderController {
         GetOrderResponseDto current = orderService.getOrderById(id);
         assertCanAccess(current, caller);
         return ResponseEntity.status(HttpStatus.OK)
-            .body(ApiResponse.success(orderService.updateOrder(id, requestDto), "Order Updated Successfully"));
+            .body(ApiResponse.success(
+                    orderService.updateOrder(id, requestDto, caller.id(), caller.isAdmin()),
+                    "Order Updated Successfully"));
     }
 
     @Operation(summary = "Get an order summary",
