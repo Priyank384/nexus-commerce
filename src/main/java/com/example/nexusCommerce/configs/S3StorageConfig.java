@@ -38,7 +38,7 @@ public class S3StorageConfig {
                 .region(Region.of(region.trim()))
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create(accessKey.trim(), secretKey.trim())))
-                // R2 and other S3-compatible stores are reached as /<bucket>/<key>.
+                // Supabase Storage (and R2) address objects as /<bucket>/<key>.
                 .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
                 .build();
     }

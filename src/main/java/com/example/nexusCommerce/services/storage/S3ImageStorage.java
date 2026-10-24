@@ -17,8 +17,8 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 /**
- * S3-compatible storage (Cloudflare R2 in production). Objects are named with UUIDs under a
- * key prefix and served from the bucket's public base URL, so the URL stored on a product
+ * S3-compatible storage (Supabase Storage in production). Objects are named with UUIDs under
+ * a key prefix and served from the bucket's public base URL, so the URL stored on a product
  * never changes and can be cached immutably.
  */
 @Slf4j
