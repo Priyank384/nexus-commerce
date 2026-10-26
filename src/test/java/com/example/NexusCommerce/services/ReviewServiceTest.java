@@ -157,6 +157,7 @@ class ReviewServiceTest {
         Review review = Review.builder().rating(BigDecimal.valueOf(4)).build();
         GetReviewResponseDto dto = GetReviewResponseDto.builder().id(1L).productId(1L).build();
 
+        when(productRepository.existsById(1L)).thenReturn(true);
         when(reviewRepository.findByProductId(eq(1L), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(review), PageRequest.of(0, 20), 1));
         when(reviewAdapter.mapToGetReviewResponseDto(review)).thenReturn(dto);
@@ -164,6 +165,15 @@ class ReviewServiceTest {
         PageResponse<GetReviewResponseDto> result = reviewService.getReviewsByProductId(1L, 0, 20);
 
         assertEquals(1, result.getContent().size());
+    }
+
+    @Test
+    void getReviewsByProductId_whenProductIsUnknown_throwsNotFound() {
+        when(productRepository.existsById(404L)).thenReturn(false);
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> reviewService.getReviewsByProductId(404L, 0, 20));
+        verify(reviewRepository, never()).findByProductId(eq(404L), any(Pageable.class));
     }
 
     @Test

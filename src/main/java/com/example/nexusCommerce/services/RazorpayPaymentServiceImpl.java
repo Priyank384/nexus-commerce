@@ -11,6 +11,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.example.nexusCommerce.dtos.CreatePaymentResponseDto;
 import com.example.nexusCommerce.dtos.GetPaymentStatusResponseDto;
@@ -46,8 +47,15 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
     private final OrderProductsRepository orderProductsRepository;
     private final RazorpayClient razorpay;
     private final NotificationService notifications;
+    /** A bulk UPDATE needs a live transaction; createPayment has none of its own by design. */
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    /**
+     * Deliberately not {@code @Transactional}: issuing an intent is an HTTP round trip, and
+     * holding a pooled connection (plus the order row lock) for its duration turns a slow
+     * provider into database saturation. The intent is recorded afterwards with a conditional
+     * UPDATE that refuses to overwrite a capture that won the race meanwhile.
+     */
     @Caching(evict = {
             @CacheEvict(cacheNames = ORDER_ALL, allEntries = true),
             @CacheEvict(cacheNames = { ORDER_BY_ID, ORDER_SUMMARY }, key = "#orderId")
@@ -67,16 +75,19 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         boolean pricedTheSame = order.getPaymentAmountPaise() != null
                 && order.getPaymentAmountPaise() == amountInPaise
                 && order.getPaymentStatus() == PaymentStatus.CREATED;
-        String razorpayOrderId = pricedTheSame
-                ? order.getPaymentIntentId()
-                : razorpay.createOrder(amountInPaise, "order-" + orderId, orderId.toString());
-
-        if (!pricedTheSame) {
-            order.setPaymentProvider(PROVIDER);
-            order.setPaymentIntentId(razorpayOrderId);
-            order.setPaymentAmountPaise(amountInPaise);
-            order.setPaymentStatus(PaymentStatus.CREATED);
-            orderRepository.save(order);
+        String razorpayOrderId;
+        if (pricedTheSame) {
+            razorpayOrderId = order.getPaymentIntentId();
+        } else {
+            razorpayOrderId = razorpay.createOrder(amountInPaise, "order-" + orderId, orderId.toString());
+            Integer recorded = transactionTemplate.execute(status ->
+                    orderRepository.recordIntentIfUnpaid(orderId, PROVIDER, razorpayOrderId,
+                            amountInPaise, PaymentStatus.CREATED, PaymentStatus.PAID));
+            if (recorded == null || recorded == 0) {
+                // A verify/webhook settled the order while Razorpay was creating this intent.
+                // This order is already paid, so the new intent must not become the current one.
+                throw new InvalidRequestException("Order " + orderId + " has already been paid");
+            }
         }
 
         return CreatePaymentResponseDto.builder()

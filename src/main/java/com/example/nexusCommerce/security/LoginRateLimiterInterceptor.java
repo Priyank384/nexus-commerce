@@ -17,14 +17,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Fixed-window rate limiter keyed on the caller's IP, applied only to POST
- * /api/v1/auth/login. Enough to slow credential stuffing without penalising
+ * Fixed-window rate limiter keyed on the caller's IP, applied to the unauthenticated auth
+ * surface (login, refresh, register). Enough to slow credential stuffing without penalising
  * shared NAT households; for real hardening move to a gateway or WAF.
  *
- * Fails open when Redis is unreachable - see TokenBlacklistService for the same
+ * <p>Fails open when Redis is unreachable - see TokenBlacklistService for the same
  * reasoning: a soft control should not take sign-in down with the cache.
  *
- * Redis access is resolved lazily via ObjectProvider: the interceptor bean
+ * <p>Redis access is resolved lazily via ObjectProvider: the interceptor bean
  * itself must always exist (otherwise web-slice tests without Redis fail
  * to wire the chain), but preHandle is a no-op when no StringRedisTemplate
  * is registered at runtime.
@@ -35,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 public class LoginRateLimiterInterceptor implements HandlerInterceptor {
 
     private static final String PREFIX = "rate::login::";
+    private static final String REGISTER_PATH = "/api/v1/users";
 
     private final ObjectProvider<StringRedisTemplate> redisProvider;
 
@@ -47,6 +48,12 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws IOException {
+        // /api/v1/users is shared with GET /me and the admin list; only its POST (register)
+        // is an unauthenticated, brute-forceable write.
+        if (REGISTER_PATH.equals(request.getRequestURI())
+                && !"POST".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
         StringRedisTemplate redis = redisProvider.getIfAvailable();
         if (redis == null) return true;
 
@@ -68,16 +75,27 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.getWriter().write(
-                    "{\"success\":false,\"message\":\"Too many login attempts\",\"error\":\"Rate limit exceeded\",\"data\":null}");
+                    "{\"success\":false,\"message\":\"Too many attempts\",\"error\":\"Rate limit exceeded\",\"data\":null}");
             return false;
         }
         return true;
     }
 
+    /**
+     * The right-most entry is appended by the proxy nearest to us, so it is the only one we
+     * can trust; the left-most is whatever the caller chose to send and is trivially spoofed
+     * to get a fresh bucket per request.
+     */
     private String clientIp(HttpServletRequest req) {
         String xff = req.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+            String[] hops = xff.split(",");
+            for (int i = hops.length - 1; i >= 0; i--) {
+                String candidate = hops[i].trim();
+                if (!candidate.isEmpty()) {
+                    return candidate;
+                }
+            }
         }
         return req.getRemoteAddr();
     }

@@ -272,7 +272,7 @@ class OrderServiceTest {
     @Test
     void deleteOrder_returnsReservedStockSoftDeletesLineItemsThenDeletes() {
         Order order = sampleOrder();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         // Scalar (variantId, productId, quantity) triples -- no managed OrderProducts are
         // loaded, so the commit never sees a line item referencing the soft-deleted Order.
         // The null variant is a pre-V20 line, whose stock still lives on the product.
@@ -293,7 +293,7 @@ class OrderServiceTest {
 
     @Test
     void deleteOrder_whenNotFound_throwsResourceNotFoundException() {
-        when(orderRepository.findById(1L)).thenReturn(Optional.empty());
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> orderService.deleteOrder(1L));
     }
@@ -302,7 +302,18 @@ class OrderServiceTest {
     void deleteOrder_whenDelivered_throwsInvalidRequestAndTouchesNothing() {
         Order order = Order.builder().status(OrderStatus.DELIVERED).build();
         order.setId(1L);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> orderService.deleteOrder(1L));
+        verify(orderRepository, never()).delete(any());
+        verify(orderProductsRepository, never()).softDeleteByOrderId(any());
+    }
+
+    @Test
+    void deleteOrder_whenPaid_throwsInvalidRequestAndTouchesNothing() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidRequestException.class, () -> orderService.deleteOrder(1L));
         verify(orderRepository, never()).delete(any());
@@ -500,7 +511,7 @@ class OrderServiceTest {
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.SHIPPED).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderAdapter.mapToGetOrderResponseDto(eq(order), anyList())).thenReturn(response);
 
         GetOrderResponseDto result = orderService.updateOrder(1L, dto, 1L, true);
@@ -513,7 +524,7 @@ class OrderServiceTest {
     void updateOrder_ownerChangingStatus_isForbidden() {
         Order order = sampleOrder();
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 1L, false));
         verify(orderRepository, never()).save(order);
@@ -529,7 +540,7 @@ class OrderServiceTest {
                         .action(OrderItemAction.REMOVE)
                         .build()))
                 .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 1L, false));
         verify(productRepository, never()).findAllById(anyList());
@@ -540,7 +551,7 @@ class OrderServiceTest {
         Order order = sampleOrder();
         order.setPaymentStatus(PaymentStatus.PAID);
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         orderService.updateOrder(1L, dto, 99L, true);
 
@@ -548,10 +559,39 @@ class OrderServiceTest {
     }
 
     @Test
+    void updateOrder_adminEditingPaidOrderLines_isRejected() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder()
+                .orderItems(List.of(OrderItemActionDto.builder()
+                        .productId(1L)
+                        .action(OrderItemAction.ADD)
+                        .quantity(1)
+                        .build()))
+                .build();
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 99L, true));
+        verify(productRepository, never()).findAllById(anyList());
+    }
+
+    @Test
+    void updateOrder_cancellingPaidOrder_isRejected() {
+        Order order = sampleOrder();
+        order.setPaymentStatus(PaymentStatus.PAID);
+        UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.CANCELLED).build();
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+
+        assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 99L, true));
+        assertEquals(OrderStatus.PENDING, order.getStatus());
+        verify(orderProductsRepository, never()).findStockDeltasByOrderId(any());
+    }
+
+    @Test
     void updateOrder_skippingStraightToDelivered_isRejected() {
         Order order = sampleOrder();
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.DELIVERED).build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 1L, true));
         assertEquals(OrderStatus.PENDING, order.getStatus());
@@ -562,7 +602,7 @@ class OrderServiceTest {
     void updateOrder_cancellingRestocksEveryLineOnce() {
         Order order = sampleOrder();
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.CANCELLED).build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderProductsRepository.findStockDeltasByOrderId(1L))
                 .thenReturn(List.<Object[]>of(new Object[] { 11L, 1L, 2 }));
         givenSingleVariantStock(12);
@@ -584,7 +624,7 @@ class OrderServiceTest {
                         .action(OrderItemAction.REMOVE)
                         .build()))
                 .build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(InvalidRequestException.class, () -> orderService.updateOrder(1L, dto, 1L, true));
         verify(variantRepository, never()).increaseStock(anyLong(), anyInt());
@@ -594,7 +634,7 @@ class OrderServiceTest {
     void updateOrder_forAnotherUsersOrder_isForbiddenAtTheService() {
         Order order = sampleOrder();
         UpdateOrderRequestDto dto = UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build();
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
 
         assertThrows(ForbiddenException.class, () -> orderService.updateOrder(1L, dto, 7L, false));
     }
@@ -612,7 +652,7 @@ class OrderServiceTest {
                 .build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         when(variantRepository.decrementStock(11L, 2)).thenReturn(1);
         givenSingleVariantStock(8);
@@ -639,7 +679,7 @@ class OrderServiceTest {
                 .build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
@@ -666,7 +706,7 @@ class OrderServiceTest {
                 .build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         when(variantRepository.decrementStock(11L, 1)).thenReturn(1);
         givenSingleVariantStock(9);
@@ -694,7 +734,7 @@ class OrderServiceTest {
                 .build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         givenSingleVariantStock(11);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
@@ -721,7 +761,7 @@ class OrderServiceTest {
                 .build();
         GetOrderResponseDto response = GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of(existing));
@@ -743,7 +783,7 @@ class OrderServiceTest {
                         .build()))
                 .build();
 
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(product));
         givenSingleVariantStock(10);
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(new ArrayList<>());

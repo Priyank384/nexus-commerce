@@ -8,6 +8,7 @@ import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
+import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.User;
@@ -26,6 +27,12 @@ public class UserServiceImpl implements UserService {
     @Override
     public GetUserResponseDto createUser(CreateUserRequestDto requestDto) {
         String email = normalizeEmail(requestDto.getEmail());
+        // BCrypt only considers the first 72 bytes, and current Spring Security versions reject
+        // longer input outright. A char-count limit is not enough for multi-byte scripts, so the
+        // byte length is checked here and reported as a 400 rather than a 500.
+        if (requestDto.getPassword().getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72) {
+            throw new InvalidRequestException("Password must be at most 72 bytes");
+        }
         if (userRepository.existsByEmail(email)) {
             throw new DuplicateResourceException("User with email '" + requestDto.getEmail() + "' already exists!");
         }
@@ -46,6 +53,6 @@ public class UserServiceImpl implements UserService {
     }
 
     private static String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase();
+        return email == null ? null : email.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

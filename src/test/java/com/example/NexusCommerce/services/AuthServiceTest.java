@@ -20,10 +20,12 @@ import com.example.nexusCommerce.dtos.GetUserResponseDto;
 import com.example.nexusCommerce.dtos.LoginRequestDto;
 import com.example.nexusCommerce.dtos.LoginResponseDto;
 import com.example.nexusCommerce.exceptions.InvalidCredentialsException;
+import com.example.nexusCommerce.exceptions.RateLimitExceededException;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.Role;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.security.JwtService;
+import com.example.nexusCommerce.security.LoginAttemptService;
 import com.example.nexusCommerce.security.RefreshTokenService;
 import com.example.nexusCommerce.security.TokenBlacklistService;
 
@@ -47,6 +49,9 @@ class AuthServiceTest {
 
     @Mock
     private TokenBlacklistService blacklist;
+
+    @Mock
+    private LoginAttemptService loginAttempts;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -98,6 +103,19 @@ class AuthServiceTest {
 
         assertThrows(InvalidCredentialsException.class, () -> authService.login(dto));
         verify(jwtService, org.mockito.Mockito.never()).generateToken(any());
+        verify(loginAttempts).recordFailure("test@example.com");
+    }
+
+    @Test
+    void login_isRejectedWhileTheAccountIsRateLimited() {
+        LoginRequestDto dto = LoginRequestDto.builder()
+                .email("test@example.com")
+                .password("secret123")
+                .build();
+        when(loginAttempts.isBlocked("test@example.com")).thenReturn(true);
+
+        assertThrows(RateLimitExceededException.class, () -> authService.login(dto));
+        verify(userRepository, org.mockito.Mockito.never()).findByEmail(any());
     }
 
     @Test

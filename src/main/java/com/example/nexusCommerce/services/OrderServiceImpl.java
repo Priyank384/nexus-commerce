@@ -131,9 +131,9 @@ public class OrderServiceImpl implements OrderService {
     })
     @Override
     public void deleteOrder(Long id){
-        Order order = orderRepository.findById(id)
+        Order order = orderRepository.findByIdForUpdate(id)
                         .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
-        assertModifiable(order);
+        assertDeletable(order);
         restockOrder(id);
         orderProductsRepository.softDeleteByOrderId(id);
         orderRepository.delete(order);
@@ -218,9 +218,17 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public GetOrderResponseDto updateOrder(Long id, UpdateOrderRequestDto updateOrderRequestDto,
             Long callerId, boolean callerIsAdmin){
-        Order order = orderRepository.findById(id).orElseThrow(()-> new ResourceNotFoundException("Order not found with id " + id));
+        Order order = orderRepository.findByIdForUpdate(id).orElseThrow(()-> new ResourceNotFoundException("Order not found with id " + id));
         assertModifiable(order);
         assertMayMutate(order, updateOrderRequestDto, callerId, callerIsAdmin);
+        if (order.getPaymentStatus() == PaymentStatus.PAID
+                && updateOrderRequestDto.getOrderItems() != null
+                && !updateOrderRequestDto.getOrderItems().isEmpty()) {
+            // The captured amount bought these exact lines. An administrator can still move
+            // fulfilment forward, but changing what was sold is a refund, not an edit.
+            throw new InvalidRequestException(
+                    "Order " + id + " has been paid; its line items can no longer be edited");
+        }
 
         OrderStatus requestedStatus = updateOrderRequestDto.getStatus();
         if (requestedStatus == OrderStatus.CANCELLED
@@ -466,6 +474,12 @@ public class OrderServiceImpl implements OrderService {
                     "Order " + order.getId() + " cannot move from " + current + " to " + next);
         }
         if (next == OrderStatus.CANCELLED) {
+            if (order.getPaymentStatus() == PaymentStatus.PAID) {
+                // Cancelling would restock goods the customer has already paid for. Until a
+                // refund flow exists, the money must be returned first.
+                throw new InvalidRequestException(
+                        "Order " + order.getId() + " has been paid; refund it before cancelling");
+            }
             restockOrder(order.getId());
         }
         order.setStatus(next);
@@ -493,6 +507,19 @@ public class OrderServiceImpl implements OrderService {
         if (order.getStatus() == OrderStatus.DELIVERED || order.getStatus() == OrderStatus.CANCELLED) {
             throw new InvalidRequestException(
                     "Order " + order.getId() + " is " + order.getStatus() + " and can no longer be modified");
+        }
+    }
+
+    /**
+     * Deleting restocks and hides the order, so a captured payment must have been refunded
+     * first - otherwise the money is gone from every report while the goods went back on the
+     * shelf.
+     */
+    private void assertDeletable(Order order) {
+        assertModifiable(order);
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new InvalidRequestException(
+                    "Order " + order.getId() + " has been paid; refund it before deleting");
         }
     }
 

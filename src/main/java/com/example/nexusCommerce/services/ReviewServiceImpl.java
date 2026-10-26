@@ -85,6 +85,11 @@ public class ReviewServiceImpl implements ReviewService {
     @Cacheable(cacheNames = REVIEW_BY_PRODUCT, key = "#productId + ':' + #page + ':' + #size")
     @Override
     public PageResponse<GetReviewResponseDto> getReviewsByProductId(Long productId, int page, int size) {
+        // An empty page for a typo'd id looks like "this product has no reviews" and would be
+        // cached for the whole TTL, so a missing product is reported as missing.
+        if (!productRepository.existsById(productId)) {
+            throw new ResourceNotFoundException("Product with id: " + productId + " Not Found!");
+        }
         return PageResponse.of(reviewRepository.findByProductId(productId, Pagination.of(page, size)),
                 reviewAdapter::mapToGetReviewResponseDto);
     }

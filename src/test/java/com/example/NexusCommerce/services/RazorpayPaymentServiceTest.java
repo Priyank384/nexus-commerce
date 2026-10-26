@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,6 +22,9 @@ import static org.mockito.Mockito.when;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.example.nexusCommerce.dtos.CreatePaymentResponseDto;
 import com.example.nexusCommerce.dtos.GetPaymentStatusResponseDto;
@@ -54,8 +58,19 @@ class RazorpayPaymentServiceTest {
     @Mock
     private NotificationService notifications;
 
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private RazorpayPaymentServiceImpl paymentService;
+
+    @BeforeEach
+    void runTransactionCallbackInline() {
+        lenient().when(transactionTemplate.execute(any(TransactionCallback.class))).thenAnswer(inv -> {
+            TransactionCallback<?> callback = inv.getArgument(0);
+            return callback.doInTransaction(null);
+        });
+    }
 
     private Order unpaidOrder(Long ownerId, String intentId, PaymentStatus status) {
         Order order = Order.builder()
@@ -116,6 +131,8 @@ class RazorpayPaymentServiceTest {
         when(razorpay.createOrder(129900L, "order-7", "7")).thenReturn("order_RZP1");
         when(razorpay.keyId()).thenReturn("rzp_test_123");
         when(razorpay.currency()).thenReturn("INR");
+        when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
+                PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
         CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
 
@@ -123,10 +140,22 @@ class RazorpayPaymentServiceTest {
         assertEquals(129900L, result.getAmount());
         assertEquals(new BigDecimal("1299.00"), result.getTotalPrice());
         assertEquals("rzp_test_123", result.getKeyId());
-        assertEquals("razorpay", order.getPaymentProvider());
-        assertEquals("order_RZP1", order.getPaymentIntentId());
-        assertEquals(PaymentStatus.CREATED, order.getPaymentStatus());
-        verify(orderRepository).save(order);
+        verify(orderRepository).recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
+                PaymentStatus.CREATED, PaymentStatus.PAID);
+    }
+
+    @Test
+    void createPayment_whenTheOrderSettledDuringTheGatewayCall_keepsTheCapture() {
+        // The conditional UPDATE is what makes this safe: a verify/webhook that settled the
+        // order while Razorpay was answering must not be overwritten by the new intent.
+        Order order = unpaidOrder(1L, null, null);
+        givenOrder(order);
+        givenTotal("1299.00");
+        when(razorpay.createOrder(129900L, "order-7", "7")).thenReturn("order_RZP1");
+        when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
+                PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(0);
+
+        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
     }
 
     @Test
@@ -344,6 +373,8 @@ class RazorpayPaymentServiceTest {
         when(razorpay.createOrder(100L, "order-7", "7")).thenReturn("order_RZP2");
         when(razorpay.keyId()).thenReturn("rzp_test_123");
         when(razorpay.currency()).thenReturn("INR");
+        when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP2", 100L,
+                PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
         CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
 
@@ -379,11 +410,13 @@ class RazorpayPaymentServiceTest {
         when(razorpay.createOrder(149900L, "order-7", "7")).thenReturn("order_RZP9");
         when(razorpay.keyId()).thenReturn("rzp_test_123");
         when(razorpay.currency()).thenReturn("INR");
+        when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP9", 149900L,
+                PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
         CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
 
         assertEquals("order_RZP9", result.getRazorpayOrderId());
-        assertEquals(149900L, order.getPaymentAmountPaise().longValue());
+        assertEquals(149900L, result.getAmount());
     }
 
     @Test

@@ -64,6 +64,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage(), "Invalid credentials!"));
     }
 
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRateLimitExceeded(RateLimitExceededException ex){
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ex.getMessage(), "Rate limit exceeded!"));
+    }
+
     /**
      * Declarative @Valid failures on request DTOs: report each offending field instead of
      * a single opaque message.

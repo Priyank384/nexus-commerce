@@ -110,7 +110,8 @@ public class ProductServiceImpl implements ProductService {
      * why SEO URLs and the seeded catalogue both use it rather than the numeric id.
      */
     @Transactional(readOnly = true)
-    @Cacheable(cacheNames = PRODUCT_BY_SLUG, key = "#slug.toLowerCase()", sync = true)
+    @Cacheable(cacheNames = PRODUCT_BY_SLUG,
+            key = "#slug.trim().toLowerCase(T(java.util.Locale).ROOT)", sync = true)
     @Override
     public GetProductWithDetailsResponseDto getProductBySlug(String slug){
         if (slug == null || slug.isBlank()) {
@@ -245,7 +246,8 @@ public class ProductServiceImpl implements ProductService {
 
     @Transactional
     @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS,
-            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE }, allEntries = true)
+            PRODUCT_BY_CATEGORY, PRODUCT_SEARCH, PRODUCT_UNIQUE_CATEGORIES, CATEGORY_TREE,
+            VARIANT_SIZE_VALUES, VARIANT_COLOR_VALUES }, allEntries = true)
     @Override
     public GetProductResponseDto createProduct(CreateProductRequestDto requestDto){
         Category category = categoryRepository.findById(requestDto.getCategoryId())
@@ -511,7 +513,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = PRODUCT_BY_CATEGORY,
-            key = "#category.trim().toLowerCase() + ':' + #page + ':' + #size", sync = true)
+            key = "#category.trim().toLowerCase(T(java.util.Locale).ROOT) + ':' + #page + ':' + #size", sync = true)
     @Override
     public PageResponse<GetProductWithDetailsResponseDto> findByCategory(String category, int page, int size){
         if (category == null || category.isBlank()) {

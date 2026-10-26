@@ -1,0 +1,4 @@
+-- Intentionally empty: MySQL already indexes the referencing side of every foreign key.
+-- V5 creates fk_order_user (orders.user_id) and V1 creates fk_order_product /
+-- fk_product_order (order_products.order_id / product_id), so the PostgreSQL set's V27
+-- indexes exist implicitly here. The file keeps both migration sets version-aligned.

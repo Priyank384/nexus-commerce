@@ -9,9 +9,11 @@ import com.example.nexusCommerce.dtos.LoginRequestDto;
 import com.example.nexusCommerce.dtos.LoginResponseDto;
 import com.example.nexusCommerce.exceptions.InvalidCredentialsException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
+import com.example.nexusCommerce.exceptions.RateLimitExceededException;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.User;
 import com.example.nexusCommerce.security.JwtService;
+import com.example.nexusCommerce.security.LoginAttemptService;
 import com.example.nexusCommerce.security.RefreshTokenService;
 import com.example.nexusCommerce.security.TokenBlacklistService;
 
@@ -27,20 +29,27 @@ public class AuthServiceImpl implements AuthService {
     private final UserAdapter userAdapter;
     private final RefreshTokenService refreshTokens;
     private final TokenBlacklistService blacklist;
+    private final LoginAttemptService loginAttempts;
 
     @Transactional(readOnly = true)
     @Override
     public LoginResponseDto login(LoginRequestDto requestDto) {
-        String email = requestDto.getEmail() == null ? null : requestDto.getEmail().trim().toLowerCase();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new InvalidCredentialsException("Invalid email or password!"));
-        if (user.getPasswordHash() == null
+        String email = requestDto.getEmail() == null ? null
+                : requestDto.getEmail().trim().toLowerCase(java.util.Locale.ROOT);
+        if (loginAttempts.isBlocked(email)) {
+            throw new RateLimitExceededException(
+                    "Too many failed sign-in attempts for this account; try again later");
+        }
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null || user.getPasswordHash() == null
                 || !passwordEncoder.matches(requestDto.getPassword(), user.getPasswordHash())) {
+            loginAttempts.recordFailure(email);
             throw new InvalidCredentialsException("Invalid email or password!");
         }
         if (!user.isEnabled()) {
             throw new InvalidCredentialsException("This account has been disabled.");
         }
+        loginAttempts.clear(email);
         return issuePair(user);
     }
 

@@ -16,6 +16,13 @@ public interface WishlistItemRepository extends JpaRepository<WishlistItem, Long
 
     long countByWishlistId(Long wishlistId);
 
+    /**
+     * One grouped count for a user's whole wishlist sidebar instead of a query per row.
+     */
+    @Query("SELECT i.wishlist.id, COUNT(i) FROM WishlistItem i "
+            + "WHERE i.wishlist.id IN :wishlistIds GROUP BY i.wishlist.id")
+    List<Object[]> countGroupedByWishlistIds(@Param("wishlistIds") List<Long> wishlistIds);
+
     Optional<WishlistItem> findByWishlistIdAndProductId(Long wishlistId, Long productId);
 
     /**

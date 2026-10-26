@@ -39,13 +39,14 @@ public class RefreshTokenService {
      * Consumes the supplied token (single-use) and returns the bound user id, or null if
      * the token is unknown/already used. Rotation happens automatically because the caller
      * issues a new token right after.
+     *
+     * <p>GETDEL is a single round trip, so two concurrent refreshes with the same token
+     * cannot both observe it: exactly one caller wins and the other is treated as a replay.
      */
     public Long consume(String token) {
         if (token == null || token.isBlank()) return null;
-        String key = PREFIX + token;
-        String uid = redis.opsForValue().get(key);
+        String uid = redis.opsForValue().getAndDelete(PREFIX + token);
         if (uid == null) return null;
-        redis.delete(key);
         return Long.valueOf(uid);
     }
 

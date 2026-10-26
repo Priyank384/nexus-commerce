@@ -113,8 +113,20 @@ class WishlistServiceTest {
         doAnswer(inv -> { wishlists.remove((Wishlist) inv.getArgument(0)); return null; })
                 .when(wishlistRepository).delete(any(Wishlist.class));
 
-        when(itemRepository.countByWishlistId(anyLong()))
-                .thenAnswer(inv -> items.stream().filter(i -> listId(i).equals(inv.getArgument(0))).count());
+        when(itemRepository.countGroupedByWishlistIds(any()))
+                .thenAnswer(inv -> {
+                    List<Long> ids = inv.getArgument(0);
+                    java.util.Map<Long, Long> grouped = new java.util.LinkedHashMap<>();
+                    for (WishlistItem item : items) {
+                        Long id = listId(item);
+                        if (ids.contains(id)) {
+                            grouped.merge(id, 1L, Long::sum);
+                        }
+                    }
+                    return grouped.entrySet().stream()
+                            .map(entry -> new Object[] { entry.getKey(), entry.getValue() })
+                            .toList();
+                });
 
         when(productRepository.findAllById(any()))
                 .thenAnswer(inv -> productsFor(inv.getArgument(0)));

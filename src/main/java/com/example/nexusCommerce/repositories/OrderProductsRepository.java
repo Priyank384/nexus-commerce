@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderProducts;
+import com.example.nexusCommerce.schema.PaymentStatus;
 
 @Repository
 public interface  OrderProductsRepository extends JpaRepository<OrderProducts, Long>{
@@ -30,8 +31,13 @@ public interface  OrderProductsRepository extends JpaRepository<OrderProducts, L
     @Query("SELECT op FROM OrderProducts op WHERE op.order.id IN :orderIds")
     List<OrderProducts> findByOrderIdsWithProduct(@Param("orderIds") List<Long> orderIds);
 
-    @Query("SELECT COALESCE(SUM(op.unitPrice * op.quantity), 0) FROM OrderProducts op")
-    BigDecimal totalRevenue();
+    /**
+     * Revenue means money actually captured, so only PAID orders count. Summing every live
+     * line item would inflate the dashboard with abandoned checkouts and failed payments.
+     */
+    @Query("SELECT COALESCE(SUM(op.unitPrice * op.quantity), 0) FROM OrderProducts op "
+            + "JOIN op.order o WHERE o.paymentStatus = :paid")
+    BigDecimal totalSettledRevenue(@Param("paid") PaymentStatus paid);
 
     /**
      * What one order costs, straight from the price snapshots written at checkout. Aggregate

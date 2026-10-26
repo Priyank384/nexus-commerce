@@ -1,6 +1,7 @@
 package com.example.nexusCommerce.configs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -66,45 +67,18 @@ class AdminBootstrapTest {
     }
 
     @Test
-    void run_promotesAnExistingUserWithoutRewritingAWorkingPassword() {
+    void run_leavesAnExistingAccountUntouched() {
         User existing = User.builder().name("Root").email("root-admin@nexuscommerce.test")
-                .passwordHash("$2a$10$existing").role(Role.USER).enabled(true).build();
+                .passwordHash("$2a$10$existing").role(Role.USER).enabled(false).build();
         configure("root-admin@nexuscommerce.test", "dev-admin-pass");
         when(userRepository.findByEmail("root-admin@nexuscommerce.test")).thenReturn(Optional.of(existing));
-        when(passwordEncoder.matches("dev-admin-pass", "$2a$10$existing")).thenReturn(true);
 
         bootstrap.run(null);
 
-        assertEquals(Role.ADMIN, existing.getRole());
-        verify(userRepository).save(existing);
-        verify(passwordEncoder, never()).encode(anyString());
-    }
-
-    @Test
-    void run_replacesThePasswordWhenTheStoredOneDoesNotMatch() {
-        User existing = User.builder().name("Root").email("root-admin@nexuscommerce.test")
-                .passwordHash("$2a$10$unknown").role(Role.ADMIN).enabled(true).build();
-        configure("root-admin@nexuscommerce.test", "dev-admin-pass");
-        when(userRepository.findByEmail("root-admin@nexuscommerce.test")).thenReturn(Optional.of(existing));
-        when(passwordEncoder.matches("dev-admin-pass", "$2a$10$unknown")).thenReturn(false);
-        when(passwordEncoder.encode("dev-admin-pass")).thenReturn("$2a$10$fresh");
-
-        bootstrap.run(null);
-
-        assertEquals("$2a$10$fresh", existing.getPasswordHash());
-        verify(userRepository).save(existing);
-    }
-
-    @Test
-    void run_leavesTheDatabaseAloneWhenTheAccountIsAlreadyCorrect() {
-        User existing = User.builder().name("Root").email("root-admin@nexuscommerce.test")
-                .passwordHash("$2a$10$good").role(Role.ADMIN).enabled(true).build();
-        configure("root-admin@nexuscommerce.test", "dev-admin-pass");
-        when(userRepository.findByEmail("root-admin@nexuscommerce.test")).thenReturn(Optional.of(existing));
-        when(passwordEncoder.matches("dev-admin-pass", "$2a$10$good")).thenReturn(true);
-
-        bootstrap.run(null);
-
+        assertEquals(Role.USER, existing.getRole());
+        assertFalse(existing.isEnabled());
+        assertEquals("$2a$10$existing", existing.getPasswordHash());
         verify(userRepository, never()).save(any());
+        verify(passwordEncoder, never()).encode(anyString());
     }
 }

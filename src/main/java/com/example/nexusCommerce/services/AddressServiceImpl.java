@@ -55,7 +55,7 @@ public class AddressServiceImpl implements AddressService {
                 .city(requestDto.getCity().trim())
                 .state(requestDto.getState().trim())
                 .postalCode(requestDto.getPostalCode().trim())
-                .country(fallback(trimToNull(requestDto.getCountry()), "IN").toUpperCase())
+                .country(fallback(trimToNull(requestDto.getCountry()), "IN").toUpperCase(java.util.Locale.ROOT))
                 .defaultShipping(Boolean.TRUE.equals(requestDto.getDefaultShipping()))
                 .defaultBilling(Boolean.TRUE.equals(requestDto.getDefaultBilling()))
                 .build();
@@ -85,7 +85,8 @@ public class AddressServiceImpl implements AddressService {
         address.setCity(requestDto.getCity().trim());
         address.setState(requestDto.getState().trim());
         address.setPostalCode(requestDto.getPostalCode().trim());
-        address.setCountry(fallback(trimToNull(requestDto.getCountry()), address.getCountry()).toUpperCase());
+        address.setCountry(fallback(trimToNull(requestDto.getCountry()), address.getCountry())
+                .toUpperCase(java.util.Locale.ROOT));
         boolean shipping = requestDto.getDefaultShipping() != null
                 ? requestDto.getDefaultShipping() : address.getDefaultShipping();
         boolean billing = requestDto.getDefaultBilling() != null

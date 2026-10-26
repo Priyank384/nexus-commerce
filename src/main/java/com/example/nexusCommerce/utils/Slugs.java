@@ -1,5 +1,6 @@
 package com.example.nexusCommerce.utils;
 
+import java.util.Locale;
 import java.util.function.Predicate;
 
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
@@ -18,7 +19,7 @@ public final class Slugs {
         if (raw == null) {
             return null;
         }
-        String slug = raw.trim().toLowerCase()
+        String slug = raw.trim().toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("(^-|-$)", "");
         return slug.isEmpty() ? null : slug;

@@ -9,6 +9,8 @@ import java.util.UUID;
 import javax.crypto.SecretKey;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 
 import com.example.nexusCommerce.schema.Role;
@@ -25,8 +27,11 @@ public class JwtService {
     private final SecretKey key;
     private final Duration expiration;
 
+    private static final String DEV_DEFAULT_SECRET_MARKER = "nexuscommerce-dev-only-secret";
+
     public JwtService(@Value("${app.jwt.secret}") String secret,
-                      @Value("${app.jwt.expiration-minutes}") long expirationMinutes) {
+                      @Value("${app.jwt.expiration-minutes}") long expirationMinutes,
+                      Environment environment) {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         // HMAC-SHA256 needs a 256-bit key. Without this guard the failure surfaces as a
         // WeakKeyException from inside JJWT, which does not name the variable to fix.
@@ -34,6 +39,13 @@ public class JwtService {
             throw new IllegalStateException(
                     "JWT_SECRET must be at least 32 bytes (found " + keyBytes.length
                             + "). Generate one with: openssl rand -base64 48");
+        }
+        // The built-in default is public knowledge (it is in the repo), so a prod boot that
+        // still uses it would hand anyone a valid signing key.
+        if (environment.acceptsProfiles(Profiles.of("prod")) && secret.contains(DEV_DEFAULT_SECRET_MARKER)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET is still the built-in development default; set a unique "
+                            + "32+ byte secret in the prod profile. Generate one with: openssl rand -base64 48");
         }
         this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expiration = Duration.ofMinutes(expirationMinutes);

@@ -63,9 +63,20 @@ public class WishlistServiceImpl implements WishlistService {
     @Transactional(readOnly = true)
     @Override
     public List<GetWishlistResponseDto> listMyWishlists(Long userId) {
-        return wishlistRepository.findByUserId(userId).stream()
+        List<Wishlist> wishlists = wishlistRepository.findByUserId(userId);
+        if (wishlists.isEmpty()) {
+            return List.of();
+        }
+        // One grouped count for the whole sidebar; a per-row countByWishlistId is an N+1 on a
+        // list the account page reads every time it opens.
+        Map<Long, Long> counts = wishlistItemRepository.countGroupedByWishlistIds(
+                        wishlists.stream().map(Wishlist::getId).collect(Collectors.toList())).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> ((Number) row[1]).longValue()));
+        return wishlists.stream()
                 .map(wishlist -> wishlistAdapter.mapToWishlistSummary(wishlist,
-                        (int) wishlistItemRepository.countByWishlistId(wishlist.getId())))
+                        counts.getOrDefault(wishlist.getId(), 0L).intValue()))
                 .collect(Collectors.toList());
     }
 

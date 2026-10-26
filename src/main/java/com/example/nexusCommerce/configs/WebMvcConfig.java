@@ -26,7 +26,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         LoginRateLimiterInterceptor interceptor = loginRateLimiter.getIfAvailable();
         if (interceptor != null) {
-            registry.addInterceptor(interceptor).addPathPatterns("/api/v1/auth/login");
+            registry.addInterceptor(interceptor)
+                    .addPathPatterns("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/users");
         }
     }
 

@@ -26,6 +26,7 @@ import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.repositories.ReviewRepository;
 import com.example.nexusCommerce.repositories.UserRepository;
 import com.example.nexusCommerce.schema.OrderStatus;
+import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.Role;
 import com.example.nexusCommerce.schema.User;
@@ -55,7 +56,7 @@ public class AdminServiceImpl implements AdminService {
             byStatus.put((OrderStatus) row[0], ((Number) row[1]).longValue());
         }
 
-        BigDecimal revenue = orderProductsRepository.totalRevenue();
+        BigDecimal revenue = orderProductsRepository.totalSettledRevenue(PaymentStatus.PAID);
 
         return AdminMetricsResponseDto.builder()
                 .totalUsers(userRepository.count())

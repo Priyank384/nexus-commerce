@@ -102,7 +102,7 @@ public class AdminController {
                description = "Partial merge; either or both fields may be sent. The last active admin cannot be disabled. Requires ROLE_ADMIN.")
     @PatchMapping("/users/{id}")
     public ResponseEntity<ApiResponse<GetUserResponseDto>> updateUser(
-            @PathVariable Long id, @RequestBody UpdateUserRequestDto requestDto) {
+            @PathVariable Long id, @Valid @RequestBody UpdateUserRequestDto requestDto) {
         return ResponseEntity.ok(ApiResponse.success(adminService.updateUser(id, requestDto), "User updated successfully"));
     }
 

@@ -106,6 +106,10 @@ management:
       application: ${spring.application.name}
 
 app:
+  flyway:
+    # Local convenience: repair the history before migrating so a half-applied seed does
+    # not wedge the schema. Off unless FLYWAY_REPAIR=true; the prod profile forces it off.
+    repair: ${FLYWAY_REPAIR:false}
   cors:
     # Comma-separated browser origins allowed to call the API directly. The storefront is a
     # BFF (the browser only talks to Next), so this guards direct calls rather than the app.

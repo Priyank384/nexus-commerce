@@ -15,14 +15,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Creates (or promotes) one ADMIN account at startup so the admin surface can be exercised
- * without editing rows by hand. Inert unless both {@code app.admin.bootstrap.email} and
+ * Creates one ADMIN account at startup so the admin surface can be exercised without editing
+ * rows by hand. Inert unless both {@code app.admin.bootstrap.email} and
  * {@code app.admin.bootstrap.password} are set, which is exactly how V14's promote-by-email seed
  * failed: the migration runs before the account exists, so on a fresh database it is a no-op and
  * nobody can log in as ADMIN.
  *
- * <p>Never set these properties in a real deployment — the configured account is forced to ADMIN
- * with that password on every boot.
+ * <p>Create-only: an existing account is never promoted, re-enabled or have its password reset.
+ * Leaving the bootstrap credentials in a deployment must therefore not become a way to take over
+ * an account once the real password has been changed.
  */
 @Slf4j
 @Component
@@ -47,40 +48,21 @@ public class AdminBootstrap implements ApplicationRunner {
         if (email.isBlank() || password.isBlank()) {
             return;
         }
-        String normalized = email.trim().toLowerCase();
+        String normalized = email.trim().toLowerCase(java.util.Locale.ROOT);
 
-        User admin = userRepository.findByEmail(normalized).orElse(null);
-        if (admin == null) {
-            userRepository.save(User.builder()
-                    .name(name)
-                    .email(normalized)
-                    .passwordHash(passwordEncoder.encode(password))
-                    .role(Role.ADMIN)
-                    .enabled(true)
-                    .build());
-            log.info("Bootstrapped ADMIN account {}", normalized);
+        if (userRepository.findByEmail(normalized).isPresent()) {
+            log.info("ADMIN bootstrap account {} already exists; leaving it untouched. "
+                    + "Remove ADMIN_BOOTSTRAP_* once the account is in use.", normalized);
             return;
         }
 
-        // The account usually already exists (V14 promoted it by email), and its password is
-        // whatever whoever registered it chose. Re-hash only when it does not already match, so a
-        // restart neither writes a new bcrypt salt every time nor silently keeps an old password.
-        boolean changed = false;
-        if (admin.getRole() != Role.ADMIN) {
-            admin.setRole(Role.ADMIN);
-            changed = true;
-        }
-        if (!admin.isEnabled()) {
-            admin.setEnabled(true);
-            changed = true;
-        }
-        if (admin.getPasswordHash() == null || !passwordEncoder.matches(password, admin.getPasswordHash())) {
-            admin.setPasswordHash(passwordEncoder.encode(password));
-            changed = true;
-        }
-        if (changed) {
-            userRepository.save(admin);
-            log.info("Promoted existing account {} to ADMIN", normalized);
-        }
+        userRepository.save(User.builder()
+                .name(name)
+                .email(normalized)
+                .passwordHash(passwordEncoder.encode(password))
+                .role(Role.ADMIN)
+                .enabled(true)
+                .build());
+        log.info("Bootstrapped ADMIN account {}", normalized);
     }
 }

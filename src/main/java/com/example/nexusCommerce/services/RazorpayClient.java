@@ -177,7 +177,7 @@ public class RazorpayClient {
     }
 
     private static String normalizeHex(String signature) {
-        return signature == null ? "" : signature.trim().toLowerCase();
+        return signature == null ? "" : signature.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private static String hmac(String secret, String data) {

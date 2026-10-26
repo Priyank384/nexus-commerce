@@ -134,7 +134,7 @@ class OrderStockCacheIntegrationTest {
     void orderEditsEvictEveryProductReadModel() {
         Order order = Order.builder().status(OrderStatus.PENDING).build();
         order.setId(1L);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderAdapter.mapToGetOrderResponseDto(any(), anyList())).thenReturn(null);
 
         orderService.updateOrder(1L, UpdateOrderRequestDto.builder().status(OrderStatus.SHIPPED).build(), 1L, true);
@@ -146,7 +146,7 @@ class OrderStockCacheIntegrationTest {
     void deletingAnOrderEvictsEveryProductReadModel() {
         Order order = Order.builder().status(OrderStatus.PENDING).build();
         order.setId(1L);
-        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
         when(orderProductsRepository.findStockDeltasByOrderId(1L)).thenReturn(List.of());
 
         orderService.deleteOrder(1L);

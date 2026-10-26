@@ -1,0 +1,15 @@
+# Production profile (Render sets SPRING_PROFILES_ACTIVE=prod). Everything here is a
+# surface-reduction that is only wrong locally.
+springdoc:
+  # The OpenAPI document names every admin route and payload. It is a development tool,
+  # not part of the public production contract, so both the document and the UI are off.
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+app:
+  flyway:
+    # A failed migration must stop the boot in production. Repair is an explicit opt-in
+    # for a developer's half-applied local schema (see DevFlywayRepairConfig).
+    repair: false

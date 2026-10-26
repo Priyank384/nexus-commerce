@@ -1,5 +1,6 @@
 package com.example.nexusCommerce.dtos;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -15,6 +16,7 @@ public class AddToCartRequestDto {
     private Long productId;
     @NotNull
     @Min(1)
+    @Max(value = 99, message = "A cart line cannot hold more than 99 units")
     private Integer quantity;
 
     /**

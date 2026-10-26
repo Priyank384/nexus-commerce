@@ -31,6 +31,13 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class CartServiceImpl implements CartService {
 
+    /**
+     * A cart line is a shopping intent, not a wholesale order. Capping it also keeps
+     * alreadyInCart + quantity from overflowing an int (a live audit reached -2147483648
+     * through a client-supplied Integer.MAX_VALUE).
+     */
+    private static final int MAX_LINE_QUANTITY = 99;
+
     private final CartRepository cartRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
@@ -57,10 +64,11 @@ public class CartServiceImpl implements CartService {
                 .filter(i -> variant.getId().equals(lineVariantId(i)))
                 .findFirst();
         int alreadyInCart = existing.map(CartItem::getQuantity).orElse(0);
-        assertStockCovers(variant, alreadyInCart + requestDto.getQuantity());
+        int targetQuantity = checkedLineQuantity(alreadyInCart, requestDto.getQuantity());
+        assertStockCovers(variant, targetQuantity);
 
         if (existing.isPresent()) {
-            existing.get().setQuantity(alreadyInCart + requestDto.getQuantity());
+            existing.get().setQuantity(targetQuantity);
         } else {
             cart.getItems().add(CartItem.builder()
                     .cart(cart)
@@ -83,8 +91,9 @@ public class CartServiceImpl implements CartService {
         // The quantity is replaced, not added, but it still has to be sellable: a cart kept
         // at four units of a two-unit variant would fail at checkout, after the shopper has
         // already committed to the order.
-        assertStockCovers(item.getVariant(), requestDto.getQuantity());
-        item.setQuantity(requestDto.getQuantity());
+        int targetQuantity = checkedLineQuantity(0, requestDto.getQuantity());
+        assertStockCovers(item.getVariant(), targetQuantity);
+        item.setQuantity(targetQuantity);
         return toResponse(cartRepository.save(cart), userId);
     }
 
@@ -203,6 +212,18 @@ public class CartServiceImpl implements CartService {
             throw new InvalidRequestException("Only " + available + " left of "
                     + variant.getSize() + " / " + variant.getColorName());
         }
+    }
+
+    private static int checkedLineQuantity(int alreadyInCart, Integer requested) {
+        if (requested == null || requested < 1) {
+            throw new InvalidRequestException("Cart quantity must be at least 1");
+        }
+        long total = (long) alreadyInCart + requested;
+        if (total > MAX_LINE_QUANTITY) {
+            throw new InvalidRequestException(
+                    "A cart line cannot hold more than " + MAX_LINE_QUANTITY + " units");
+        }
+        return (int) total;
     }
 
     // A brand-new line has no read-only variant_id mirror until it is flushed.

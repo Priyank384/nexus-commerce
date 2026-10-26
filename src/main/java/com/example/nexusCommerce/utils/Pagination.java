@@ -1,5 +1,6 @@
 package com.example.nexusCommerce.utils;
 
+import java.util.Locale;
 import java.util.Set;
 
 import org.springframework.data.domain.PageRequest;
@@ -67,13 +68,13 @@ public final class Pagination {
         Sort.Direction dir = parts.length > 1
                 ? Sort.Direction.fromString(parts[1].trim())
                 : Sort.Direction.ASC;
-        return field + ":" + dir.name().toLowerCase();
+        return field + ":" + dir.name().toLowerCase(Locale.ROOT);
     }
 
     private static Sort parseSort(String sort, Set<String> allowedFields) {
         String canonical = canonicalSort(sort, allowedFields);
         String[] kv = canonical.split(":");
-        Sort.Direction dir = Sort.Direction.fromString(kv[1].toUpperCase());
+        Sort.Direction dir = Sort.Direction.fromString(kv[1].toUpperCase(Locale.ROOT));
         Sort primary = Sort.by(dir, kv[0]);
         if ("id".equals(kv[0])) {
             return primary;

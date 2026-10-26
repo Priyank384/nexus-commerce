@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +16,8 @@ import org.springframework.data.repository.query.Param;
 import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.PaymentStatus;
+
+import jakarta.persistence.LockModeType;
 
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
@@ -25,6 +28,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @EntityGraph(attributePaths = "user")
     Page<Order> findByUser_Id(Long userId, Pageable pageable);
+
+    /**
+     * Serialises the read-modify-write in updateOrder/deleteOrder. Two administrators
+     * editing the same order would otherwise each read the old line items and both apply
+     * stock deltas, leaving the order and the inventory disagreeing.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
 
     /**
      * Resolves a gateway webhook (which arrives with no user context) back to our order.
@@ -69,4 +81,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             + "AND (o.paymentStatus IS NULL OR o.paymentStatus <> :settled)")
     int markFailedIfNotPaid(@Param("id") Long id, @Param("to") PaymentStatus to,
             @Param("settled") PaymentStatus settled);
+
+    /**
+     * Records a freshly issued gateway intent without holding a DB transaction across the
+     * provider's HTTP call. Conditional on the order still being unpaid, so an intent issued
+     * while another request settled the order cannot overwrite the capture.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE Order o SET o.paymentProvider = :provider, o.paymentIntentId = :intent, "
+            + "o.paymentAmountPaise = :amount, o.paymentStatus = :to, o.version = o.version + 1 "
+            + "WHERE o.id = :id AND o.deletedAt IS NULL "
+            + "AND (o.paymentStatus IS NULL OR o.paymentStatus <> :paid)")
+    int recordIntentIfUnpaid(@Param("id") Long id, @Param("provider") String provider,
+            @Param("intent") String intent, @Param("amount") long amount,
+            @Param("to") PaymentStatus to, @Param("paid") PaymentStatus paid);
 }
