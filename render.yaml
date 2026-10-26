@@ -47,6 +47,12 @@ services:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
 
+      # springdoc is off in prod. Set true in the dashboard only for a short-lived API-docs
+      # demo: it publishes the whole admin surface. sync: false keeps a blueprint sync from
+      # overwriting whatever the dashboard holds.
+      - key: SPRINGDOC_ENABLED
+        sync: false
+
       # --- cache / refresh tokens / rate limits: Upstash Redis ---
       # Paste the full rediss:// URL from the Upstash console, port included (":6379").
       # Credentials and TLS are part of the URL; leave this unset only if you also set
