@@ -114,10 +114,8 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | `DB_USER` / `DB_PASSWORD` | fall back to `username` / `password` | DB credentials |
 | `DB_DRIVER` | `com.mysql.cj.jdbc.Driver` | Set to `org.postgresql.Driver` for PostgreSQL |
 | `FLYWAY_LOCATIONS` | `classpath:db/migration` | Set to `classpath:db/migration-postgres` to match the DB above |
-| `REDIS_URL` | empty | Full `rediss://user:pass@host:6379` URL; takes precedence over the parts below |
-| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `redis_port` (`6379`) | Redis endpoint; `REDIS_PORT` supersedes the legacy `redis_port` |
-| `REDIS_USERNAME` / `REDIS_PASSWORD` | empty | AUTH for managed Redis (Upstash uses `default`) |
-| `REDIS_SSL` | `false` | Enable TLS for managed Redis when using host/port rather than a URL |
+| `REDIS_URL` | `redis://localhost:<redis_port>` | Full `rediss://user:pass@host:6379` URL. Credentials and TLS live in the URL; a managed provider must supply it |
+| `REDIS_HOST` / `REDIS_PORT` | `localhost` / `redis_port` (`6379`) | Only used to compose the default URL when `REDIS_URL` is unset |
 | `REDIS_CONNECT_TIMEOUT` | `2s` | Connect budget; a managed TLS endpoint pays a handshake on cold connections |
 | `REDIS_TIMEOUT` | `500ms` | Lettuce command **and handshake** deadline — raise it (e.g. `3s`) for a Redis in another region |
 | `DB_POOL_SIZE` | `20` | Hikari maximum pool size; lower it on managed free tiers |

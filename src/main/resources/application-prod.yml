@@ -3,10 +3,12 @@
 springdoc:
   # The OpenAPI document names every admin route and payload. It is a development tool,
   # not part of the public production contract, so both the document and the UI are off.
+  # Set SPRINGDOC_ENABLED=true in the dashboard only for a short-lived demo: it publishes
+  # the full admin surface to anyone who finds the URL.
   api-docs:
-    enabled: false
+    enabled: ${SPRINGDOC_ENABLED:false}
   swagger-ui:
-    enabled: false
+    enabled: ${SPRINGDOC_ENABLED:false}
 
 app:
   flyway:

@@ -49,8 +49,8 @@ services:
 
       # --- cache / refresh tokens / rate limits: Upstash Redis ---
       # Paste the full rediss:// URL from the Upstash console, port included (":6379").
-      # REDIS_HOST/PORT/USERNAME/PASSWORD/SSL remain supported for providers that do not
-      # issue a single URL; when REDIS_URL is set it takes precedence.
+      # Credentials and TLS are part of the URL; leave this unset only if you also set
+      # REDIS_HOST/REDIS_PORT for a plain redis:// server.
       - key: REDIS_URL
         sync: false
       # Lettuce applies its command timeout to the TLS handshake too; the local-dev 500ms

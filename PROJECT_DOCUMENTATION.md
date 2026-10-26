@@ -180,8 +180,7 @@ Spring loads it via `spring.config.import: optional:file:.env[.properties]` in `
 | `spring.datasource.username` | `${username}` | MySQL user |
 | `spring.datasource.password` | `${password}` | MySQL password |
 | `spring.datasource.hikari` | `application.yml` | pool max 20, min idle 5, 3 s checkout timeout, `nexus-pool` JMX name |
-| `spring.data.redis.host` | `application.yml` | `localhost` |
-| `spring.data.redis.port` | `${redis_port}` | Redis port |
+| `spring.data.redis.url` | `redis://localhost:<redis_port>` | Full Redis URL; `rediss://user:pass@host:6379` for managed TLS. `REDIS_HOST`/`REDIS_PORT` only shape the default when `REDIS_URL` is unset |
 | `spring.data.redis.timeout` / `connect-timeout` | `application.yml` | 500 ms each — turns a hung Redis into a fast fallback, not a stall |
 | `spring.jpa.hibernate.ddl-auto` | `validate` | Schema managed by Flyway only |
 | `spring.jpa.show-sql` | `false` | SQL off; use the `org.hibernate.SQL` logger when needed |

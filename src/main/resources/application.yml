@@ -59,16 +59,11 @@ spring:
     timeout-per-shutdown-phase: 30s
   data:
     redis:
-      # Local development points at the Homebrew Redis (redis_port in .env). Managed
-      # providers (Upstash) hand out a single rediss:// URL — set REDIS_URL and it wins
-      # over the parts below; the host/port/SSL trio stays for providers that don't.
-      url: ${REDIS_URL:}
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:${redis_port:6379}}
-      username: ${REDIS_USERNAME:}
-      password: ${REDIS_PASSWORD:}
-      ssl:
-        enabled: ${REDIS_SSL:false}
+      # One URL covers every topology: redis://host:port for a local server,
+      # rediss://user:pass@host:port for Upstash. It must never default to an empty
+      # string: Spring treats "" as a URL and fails before host/port are consulted,
+      # which is what broke a fresh checkout and the CI boot smoke test.
+      url: ${REDIS_URL:redis://${REDIS_HOST:localhost}:${REDIS_PORT:${redis_port:6379}}}
       # Without these a Redis that accepts the socket but stops answering holds a request
       # thread for the Lettuce default (60s). The CacheErrorHandler covers failures, not
       # hangs, so the deadline has to be explicit. Connect gets a looser budget because a
