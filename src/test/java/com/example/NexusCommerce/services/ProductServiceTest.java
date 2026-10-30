@@ -313,6 +313,20 @@ class ProductServiceTest {
     }
 
     @Test
+    void updateProduct_blankGenderClearsIt() {
+        Product product = sampleProduct();
+        product.setGender("MEN");
+        when(productRepository.findById(1L)).thenReturn(Optional.of(product));
+        when(productRepository.save(any(Product.class))).thenReturn(product);
+
+        // The editor sends "" for an unset field; the DTO must accept it and the service
+        // must store null rather than the empty string.
+        productService.updateProduct(1L, UpdateProductRequestDto.builder().gender("").build());
+
+        assertNull(product.getGender());
+    }
+
+    @Test
     void updateProduct_rejectsARatingAboveTheFiveStarScale() {
         Product product = sampleProduct();
         when(productRepository.findById(1L)).thenReturn(Optional.of(product));
