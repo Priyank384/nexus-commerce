@@ -66,7 +66,8 @@ public class CreateProductRequestDto {
     @Size(max = 500, message = "Care instructions must be at most 500 characters")
     private String careInstructions;
 
-    @Pattern(regexp = "MEN|WOMEN|UNISEX|KIDS", message = "Gender must be MEN, WOMEN, UNISEX or KIDS")
+    // Blank is the editor's "not set"; the service stores null for it.
+    @Pattern(regexp = "^$|MEN|WOMEN|UNISEX|KIDS", message = "Gender must be MEN, WOMEN, UNISEX or KIDS")
     private String gender;
 
     /** Null means active -- see the no-args-constructor note on the other optional fields. */

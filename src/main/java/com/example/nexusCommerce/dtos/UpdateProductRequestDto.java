@@ -57,7 +57,8 @@ public class UpdateProductRequestDto {
     @Size(max = 500, message = "Care instructions must be at most 500 characters")
     private String careInstructions;
 
-    @Pattern(regexp = "MEN|WOMEN|UNISEX|KIDS", message = "Gender must be MEN, WOMEN, UNISEX or KIDS")
+    // Blank is how the editor clears the field; the service maps it to null.
+    @Pattern(regexp = "^$|MEN|WOMEN|UNISEX|KIDS", message = "Gender must be MEN, WOMEN, UNISEX or KIDS")
     private String gender;
 
     private Boolean isActive;

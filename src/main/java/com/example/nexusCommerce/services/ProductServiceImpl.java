@@ -284,7 +284,7 @@ public class ProductServiceImpl implements ProductService {
                             .brand(trimToNull(requestDto.getBrand()))
                             .material(trimToNull(requestDto.getMaterial()))
                             .careInstructions(trimToNull(requestDto.getCareInstructions()))
-                            .gender(requestDto.getGender())
+                            .gender(trimToNull(requestDto.getGender()))
                             .isActive(requestDto.getIsActive() == null || requestDto.getIsActive())
                             .build();
 
