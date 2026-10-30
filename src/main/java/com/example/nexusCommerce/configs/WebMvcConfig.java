@@ -26,8 +26,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         LoginRateLimiterInterceptor interceptor = loginRateLimiter.getIfAvailable();
         if (interceptor != null) {
+            // Refresh is not listed: every page load refreshes the session, and behind the
+            // BFF that traffic shares one IP, so limiting it would lock shoppers out.
             registry.addInterceptor(interceptor)
-                    .addPathPatterns("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/users");
+                    .addPathPatterns("/api/v1/auth/login", "/api/v1/users");
         }
     }
 
