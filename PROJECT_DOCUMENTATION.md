@@ -39,7 +39,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 - **Orders** — purchases with line items (product + quantity), placed by an authenticated user; stock is reserved atomically and line items are **snapshotted** with the price, product name and image at purchase time. Both order and cart-checkout writes accept an optional `Idempotency-Key` so a client retry never places a duplicate order.
 - **Reviews** — post-purchase feedback tied to a specific order and product; at most one live review per `(order, product)` pair.
 
-Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed login attempts are rate-limited per IP with a Redis fixed-window counter.
+Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed sign-ins and registration attempts share one IP-keyed Redis fixed-window counter (§17.2).
 
 All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V26`) and Hibernate runs in `validate` mode only.
 
@@ -379,7 +379,7 @@ NexusCommerce uses a **two-token model**:
 1. **V14 seed** — the `V14__seed_admin_role.sql` migration promotes `root-admin@nexuscommerce.test` to `ROLE_ADMIN` if that account already exists (or on a subsequent re-run after you register it). **Rotate or delete this seed before deploying anywhere real.**
 2. **Manual promote** — set a row's `role` to `ADMIN` in MySQL directly, or use an existing admin via `PATCH /api/v1/admin/users/{id}`, then log in again — the role travels in the token.
 
-**Login rate limit** — `LoginRateLimiterInterceptor` is registered for `POST /api/v1/auth/login` only. It uses a fixed-window Redis counter keyed on the client IP (first `X-Forwarded-For` entry, else `getRemoteAddr`), with `INCR` + `EXPIRE` on first hit. Over the threshold → **429 Too Many Requests** with the standard `ApiResponse` envelope. Redis resolved lazily via `ObjectProvider`; the interceptor is a no-op when Redis isn't available (e.g. H2 test slices).
+**Login rate limit** — `LoginRateLimiterInterceptor` is registered for `POST /api/v1/auth/login` and `POST /api/v1/users` (registration); refresh is exempt. It uses a fixed-window Redis counter keyed on the client IP (rightmost `X-Forwarded-For` hop, else `getRemoteAddr`). Sign-ins are only counted once they fail: the counter is read before the request and incremented in `afterCompletion` when the response is **401**, so a successful login costs nothing. Over the threshold → **429 Too Many Requests** with the standard `ApiResponse` envelope. Redis is resolved lazily via `ObjectProvider`; the interceptor is a no-op when Redis isn't available (e.g. H2 test slices). Full mechanics in §17.2.
 
 ### 7.2 Authorization matrix (from `SecurityConfig`)
 
@@ -606,7 +606,7 @@ Two rules keep this cache from becoming a memory leak or a correctness hazard:
 
 | Prefix | Value | TTL | Notes |
 |--------|-------|-----|-------|
-| `rate::login::<client-ip>` | integer counter | `LOGIN_RATE_WINDOW_SECONDS` (default 60 s) | Fixed-window `INCR` with `EXPIRE` on first hit. Client IP = first `X-Forwarded-For` entry, else `getRemoteAddr`. Only applied to `POST /api/v1/auth/login`. |
+| `rate::login::<client-ip>` | integer counter | `LOGIN_RATE_WINDOW_SECONDS` (default 60 s) | Fixed-window `INCR` with `EXPIRE` on first hit. Client IP = **rightmost** `X-Forwarded-For` hop (the trusted proxy's entry), else `getRemoteAddr`. Shared by `POST /api/v1/auth/login` (only failed attempts increment) and `POST /api/v1/users` (every registration attempt). `POST /api/v1/auth/refresh` is not limited. |
 
 ### 10.7 Inspecting keys
 
@@ -745,10 +745,10 @@ Refresh response is identical in shape to the login response — new access toke
 
 Send the request with `Authorization: Bearer <current-access-token>`. Response has `data: null` and `message: "Signed out"`. Side effects: Redis key `jwt:blacklist::<current jti>` written with TTL = remaining access-token life; `refresh::<submitted token>` deleted.
 
-**Rate-limit behaviour** — hitting login over `LOGIN_RATE_MAX` within the window returns **429**:
+**Rate-limit behaviour** — a request is rejected with **429** once `LOGIN_RATE_MAX` failed sign-ins (or `LOGIN_RATE_MAX` registrations) have already been counted in the window:
 
 ```json
-{ "success": false, "message": "Too many login attempts", "error": "Rate limit exceeded", "data": null }
+{ "success": false, "message": "Too many attempts", "error": "Rate limit exceeded", "data": null }
 ```
 
 ### 12.3 Categories — `/api/v1/categories`
@@ -806,6 +806,8 @@ Send the request with `Authorization: Bearer <current-access-token>`. Response h
 live product sells is a `400`, and a `categorySlug` that names a parent matches its whole subtree.
 `gender` is written **uppercase** (`MEN|WOMEN|UNISEX|KIDS`, enforced by `@Pattern`) but read
 **case-insensitively** — the search DTO normalises before validating, so `?gender=unisex` works.
+On the write DTOs the pattern also allows the **empty string**: create normalises it to `null`,
+and update uses it to clear the column (this is how the admin editor unsets a value).
 
 **POST body (`CreateProductRequestDto`):**
 
@@ -1131,7 +1133,7 @@ Historical orders are immutable in effect: the line items keep their snapshotted
 | **405** | `HttpRequestMethodNotSupportedException` | `Request method 'DELETE' not supported` |
 | **409** | `DuplicateResourceException` | `A review already exists for this order and product` |
 | **400** | `InvalidRequestException` / Bean Validation / disallowed `sort` field / **missing required query param** / concurrent idempotency-key collision | `stock must not be negative`, `Order cannot be modified in DELIVERED/CANCELLED status`, `sort field not allowed: bogus`, `No products are sold in size 'zzz'`, `Required request parameter 'file' is not present` |
-| **429** | `LoginRateLimiterInterceptor` over threshold | `message: "Too many login attempts"`, `error: "Rate limit exceeded"` |
+| **429** | `LoginRateLimiterInterceptor` over threshold (failed sign-ins or registrations) | `message: "Too many attempts"`, `error: "Rate limit exceeded"` |
 | **502** | `PaymentProviderException` — Razorpay unconfigured, unreachable, or refused the request | `error: "Payment provider unavailable!"`, `message:` the upstream reason |
 | **500** | Unhandled | `Something went wrong!` + exception message |
 
@@ -1334,18 +1336,22 @@ Second call with the same key returns byte-for-byte the same 201 body from Redis
 
 ### 17.2 Login rate limiting
 
-**Where:** `security/LoginRateLimiterInterceptor.java`. Registered only for `POST /api/v1/auth/login` by `WebMvcConfig`.
+**Where:** `security/LoginRateLimiterInterceptor.java`, registered by `WebMvcConfig` for `POST /api/v1/auth/login` and `POST /api/v1/users` (registration only; `GET /api/v1/users/me` is a different path and is never limited). `POST /api/v1/auth/refresh` is deliberately **not** registered.
 
-**Model:** fixed window per client IP.
+**Why refresh and successful logins are free:** the storefront reaches Spring through a single BFF, so every shopper shares that server's egress IP, and the browser refreshes its session on every full page load. Counting refreshes or successful sign-ins exhausted a shared bucket during ordinary browsing and locked people out. Failed sign-ins are what credential stuffing looks like, and registration is an unauthenticated write, so those are the two things the counter measures.
 
-- Redis key `rate::login::<client-ip>` holding an integer counter.
-- First hit (`INCR` returns 1) also sets `EXPIRE <window-seconds>` — so the window rolls forward from the first request, not from a global tick.
-- If counter ≤ `LOGIN_RATE_MAX` → request proceeds.
-- If counter > `LOGIN_RATE_MAX` → **429** written directly to the response with the standard `ApiResponse` envelope; the controller never runs.
+**Model:** fixed window per client IP, one Redis key `rate::login::<client-ip>` shared by both surfaces.
 
-**Client IP** is read from the first `X-Forwarded-For` entry when present, else `getRemoteAddr()`. Put the interceptor behind a trusted reverse proxy (or don't trust `X-Forwarded-For` at all) — a client that can spoof that header can bypass the limit.
+- **Login, before the request** — read the counter. `count ≥ LOGIN_RATE_MAX` → **429** written directly to the response with the standard `ApiResponse` envelope; the controller never runs.
+- **Login, after the response** — when the status is **401**, increment the counter (`INCR`, with `EXPIRE <window-seconds>` on the first hit). A successful sign-in never increments.
+- **Registration, before the request** — increment first and reject while `count > LOGIN_RATE_MAX`; every registration attempt counts, whether the write then succeeds or fails validation.
+- The window rolls forward from the first hit, not from a global tick, so the budget is fresh `LOGIN_RATE_MAX` attempts per IP per window.
 
-**Redis optional:** `StringRedisTemplate` is looked up lazily through `ObjectProvider`, so when Redis isn't present (H2 test slices, minimal boots) the interceptor becomes a no-op and login still works.
+With the default `LOGIN_RATE_MAX=10`, ten failed sign-ins (or ten registrations) are allowed and the eleventh attempt inside the window answers **429**; any successful sign-in in between does not refund the failures.
+
+**Client IP** is the **rightmost** `X-Forwarded-For` hop — the address appended by the trusted reverse proxy. Earlier hops are attacker-controlled, so they are ignored; without a trusted proxy, do not trust the header at all and fall back to `getRemoteAddr()`.
+
+**Redis optional:** `StringRedisTemplate` is looked up lazily through `ObjectProvider`, so when Redis isn't present (H2 test slices, minimal boots) the interceptor becomes a no-op and sign-in still works.
 
 **Config:**
 

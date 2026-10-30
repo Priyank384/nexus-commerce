@@ -157,9 +157,11 @@ something to leave configured:
    |---|---|
    | `API_BASE_URL` | `https://nexus-commerce-api.onrender.com` |
    | `NEXT_IMAGE_HOSTS` | `<project-ref>.supabase.co` (the Storage public hostname, no scheme) |
+   | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` — canonical origin for canonicals, Open Graph, `sitemap.ts`, `robots.ts` and JSON-LD |
 
 3. Deploy. `next/image` remote patterns are baked at build time, so changing
-   `NEXT_IMAGE_HOSTS` requires a redeploy.
+   `NEXT_IMAGE_HOSTS` requires a redeploy. `NEXT_PUBLIC_SITE_URL` falls back to Vercel's
+   production URL, but set it explicitly so previews and the sitemap never disagree.
 
 The seed catalogue in V21 points at `picsum.photos` (allow-listed in `next.config.ts`).
 Replace those rows with uploads to Supabase Storage before treating the catalogue as real.

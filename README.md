@@ -9,7 +9,7 @@ NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("
 ## Features
 
 - **Auth & roles** — Register (`POST /api/v1/users`), log in (`POST /api/v1/auth/login`), refresh (`POST /api/v1/auth/refresh`) and log out (`POST /api/v1/auth/logout`). Access tokens are stateless **JWT bearer** tokens; refresh tokens are opaque, single-use values stored in Redis with rotation on every refresh. Logging out blacklists the current `jti` in Redis for the rest of its lifetime. Two roles, `USER` and `ADMIN`, gate every endpoint (see [Authentication & roles](#authentication--roles)).
-- **Login rate limiting** — Fixed-window, IP-keyed Redis counter on `POST /api/v1/auth/login` (default **10 / 60 s**, tunable via `LOGIN_RATE_MAX` / `LOGIN_RATE_WINDOW_SECONDS`). Over-limit returns **429** with the standard `ApiResponse` envelope.
+- **Auth rate limiting** — Fixed-window, IP-keyed Redis counter shared by `POST /api/v1/auth/login` and registration (`POST /api/v1/users`). Only **failed** sign-ins consume it; ten failures (default **10 / 60 s**, tunable via `LOGIN_RATE_MAX` / `LOGIN_RATE_WINDOW_SECONDS`) or ten registration attempts per window push further attempts to **429** with the standard `ApiResponse` envelope. `POST /api/v1/auth/refresh` is deliberately exempt.
 - **Categories** — Create, list (paged), get by id, update, delete, and fetch the whole **`/categories/tree`** in one call (V15 gives categories a `parent_id`, so Men → Tops and Women → Tops are distinct branches). Deleting a category that still holds live products (or children) is rejected.
 - **Products & variants** — CRUD-style operations, fetch with category details, per-product **stock** tracking, and an admin image surface: legacy single-image upload (`POST /api/v1/admin/products/{id}/image`) plus a gallery you can append to, delete from and reorder (`/images`, `/images/{imageId}`, `/images/order`). Each product carries **size × colour variants** (V16), and **the variant is the unit of stock** — `S/Black` selling out never blocks `M/Black`. Admins manage variants via `POST /products/{id}/variants`, `PUT /products/variants/{variantId}`, `DELETE /products/variants/{variantId}`.
 - **Faceted search** — `GET /api/v1/products/search` filters by `gender`, `categorySlug` (a parent slug matches its whole subtree), `minPrice`/`maxPrice`, `sizes`, `colors` and sorts by `id`, `price`, `rating`, `createdAt` or `title`. Unknown sort or facet values are rejected with **400** instead of answering with an empty page — which also stops arbitrary strings from minting unbounded cache entries. `GET /products/facets/sizes` and `/facets/colors` publish the filter vocabulary, computed only from the variants of **active, live** products — deactivating or deleting a style takes its sizes and colours out of the facets, so the storefront can never offer a filter that answers with an empty page.
@@ -123,7 +123,7 @@ The app imports an **optional** env file: `optional:file:.env[.properties]`. Eve
 | `JWT_SECRET` | dev-only string in yml | HMAC signing secret, **≥ 32 bytes** — always override outside local dev |
 | `JWT_EXPIRATION_MINUTES` | `120` | Access-token lifetime |
 | `JWT_REFRESH_EXPIRATION_DAYS` | `7` | Refresh-token TTL in Redis |
-| `LOGIN_RATE_MAX` | `10` | Login attempts per window (per client IP) |
+| `LOGIN_RATE_MAX` | `10` | Failed sign-ins (and registrations) allowed per window per client IP |
 | `LOGIN_RATE_WINDOW_SECONDS` | `60` | Window length for the login rate limiter |
 | `UPLOAD_DIR` | `uploads/products` | Local filesystem directory for uploads when `STORAGE_TYPE=local` |
 | `STORAGE_TYPE` | `local` | `local` writes to disk; `s3` uses the S3-compatible block below (Supabase Storage) |
@@ -265,7 +265,7 @@ The API is **stateless JWT** with an **opaque, rotating refresh token**. Log in 
 
 **Token shape** — HS-signed (algorithm chosen from `JWT_SECRET` length; the bundled dev secret yields HS512). Claims: `sub` = email, `uid` = user id, `role`, `jti` = random UUID used for revocation. Expires after `JWT_EXPIRATION_MINUTES` (default 120). Passwords are stored **BCrypt-hashed**; the secret and hash never leave the server.
 
-**Rate limit** — `POST /api/v1/auth/login` is IP-keyed (honouring `X-Forwarded-For`) and defaults to **10 requests / 60 s** per client. Above that → **429** with `ApiResponse` body. Clear the counter for your own IP during local testing with `redis-cli DEL rate::login::<ip>`.
+**Rate limit** — `POST /api/v1/auth/login` and registration (`POST /api/v1/users`) share one IP-keyed Redis counter. Only failed sign-ins count: the interceptor reads the counter before the request and increments it in `afterCompletion` once Spring answers **401**, so successful logins cost nothing. After **10 failed sign-ins** (default) or **10 registrations** in the 60 s window, further attempts → **429** with an `ApiResponse` body. Refresh is never limited — the storefront reaches Spring through a single BFF, so counting it would exhaust a shared bucket during ordinary browsing. The client IP is the **rightmost** `X-Forwarded-For` hop (the one the trusted proxy appended), falling back to the socket address. Clear the counter for your own IP during local testing with `redis-cli DEL rate::login::<ip>`.
 
 **Two roles** — `USER` (default) and `ADMIN`. Authorization is enforced by path + method matchers in `SecurityConfig`, plus ownership checks in `OrderController` and `CartController`.
 
@@ -275,7 +275,7 @@ The API is **stateless JWT** with an **opaque, rotating refresh token**. Log in 
 | **Any authenticated user** | Cart surface (`GET /cart`, `POST /cart/items`, `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout`), place an order directly, create a review for **your own paid order**, read **your own** profile (`GET /users/me`) and orders (`/orders/me`, `/orders/{id}`, `/orders/{id}/summary`), the whole `/wishlist` and `/addresses` surface, and `/payments/**` for orders you own. Order read/update is scoped so you can only touch orders you own. |
 | **`ROLE_ADMIN` only** | All catalogue **writes** (create/update/delete products, variants & categories), product **image upload**, review **deletion**, the order **list** (`GET /orders`) and order **deletion**, the whole `/api/v1/admin/**` surface, viewing any user's orders, and everything under `/actuator/**` except the health probes. |
 
-**Errors** — Missing/invalid/revoked token on a protected route → `401` (`"Unauthorized!"`); valid token but wrong role / not the owner → `403` (`"Forbidden!"`); too many failed logins → `429`.
+**Errors** — Missing/invalid/revoked token on a protected route → `401` (`"Unauthorized!"`); valid token but wrong role / not the owner → `403` (`"Forbidden!"`); too many failed sign-ins or registration attempts → `429`.
 
 **If Redis is down** — the *soft* controls fail open on purpose: the login rate limiter lets the attempt through and a revoked access token is briefly accepted (bounded by its own expiry), because a cache outage must not lock every honest shopper out. The *money-bearing* paths fail closed: refresh-token rotation and payment idempotency reject rather than guess.
 
@@ -314,7 +314,7 @@ The **Access** column below shows the minimum role required.
 
 | Method | Path | Access | Description |
 |--------|------|--------|-------------|
-| `POST` | `/api/v1/users` | Public | Register (`CreateUserRequestDto`: `name`, `email`, `password` ≥8, optional `phone`). |
+| `POST` | `/api/v1/users` | Public (rate-limited) | Register (`CreateUserRequestDto`: `name`, `email`, `password` ≥8, optional `phone`). |
 | `POST` | `/api/v1/auth/login` | Public (rate-limited) | Log in (`LoginRequestDto`: `email`, `password`) → JWT access token + single-use refresh token. |
 | `POST` | `/api/v1/auth/refresh` | Public | Consume the previous refresh token, receive a fresh access + refresh pair. |
 | `POST` | `/api/v1/auth/logout` | Public (needs `Authorization` header) | Blacklist the current access-token `jti` in Redis and delete the paired refresh token. |
@@ -479,7 +479,7 @@ All endpoints below require `ROLE_ADMIN`.
 | `404` | Resource not found (e.g. missing id). |
 | `405` | Wrong HTTP method for a matched path. |
 | `409` | Duplicate resource (e.g. duplicate review for same order + product). |
-| `429` | Login rate limit exceeded (default 10/60 s per IP). |
+| `429` | Auth rate limit exceeded: more than 10 failed sign-ins, or 10 registration attempts, per 60 s from one IP. |
 | `500` | Unhandled exceptions (generic handler). |
 | `502` | The Razorpay call itself failed, or the gateway isn't configured on this server. A provider problem is never reported as a shopper's bad request — and never as a success. |
 
