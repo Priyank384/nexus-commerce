@@ -12,6 +12,4 @@ public interface WishlistRepository extends JpaRepository<Wishlist, Long> {
     List<Wishlist> findByUserId(Long userId);
 
     Optional<Wishlist> findByUserIdAndNameIgnoreCase(Long userId, String name);
-
-    Optional<Wishlist> findFirstByUserIdOrderByCreatedAtAsc(Long userId);
 }

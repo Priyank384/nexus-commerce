@@ -72,7 +72,8 @@ class WishlistServiceTest {
         when(wishlistRepository.save(any(Wishlist.class))).thenAnswer(inv -> {
             Wishlist w = inv.getArgument(0);
             if (w.getId() == null) {
-                w.setId(1L);
+                w.setId(wishlists.stream().map(Wishlist::getId).mapToLong(Long::longValue)
+                        .max().orElse(0L) + 1);
             }
             if (!wishlists.contains(w)) {
                 wishlists.add(w);
@@ -82,9 +83,6 @@ class WishlistServiceTest {
         when(wishlistRepository.findById(anyLong()))
                 .thenAnswer(inv -> wishlists.stream().filter(w -> w.getId().equals(inv.getArgument(0)))
                         .findFirst());
-        when(wishlistRepository.findFirstByUserIdOrderByCreatedAtAsc(anyLong()))
-                .thenAnswer(inv -> wishlists.stream()
-                        .filter(w -> ownerId(w).equals(inv.getArgument(0))).findFirst());
         when(wishlistRepository.findByUserId(anyLong()))
                 .thenAnswer(inv -> wishlists.stream().filter(w -> ownerId(w).equals(inv.getArgument(0))).toList());
         when(wishlistRepository.findByUserIdAndNameIgnoreCase(anyLong(), any()))
@@ -262,6 +260,36 @@ class WishlistServiceTest {
 
         assertThrows(ForbiddenException.class, () -> service.addItem(1L, theirs.getId(),
                 AddToWishlistRequestDto.builder().productId(1101L).build()));
+    }
+
+    @Test
+    void addItem_withNoListId_writesToTheDefaultListEvenWhenANamedListCameFirst() {
+        // Resolving "the default list" as the oldest row meant a shopper who created "Summer"
+        // before saving anything had every heart write land in that list, and the follow-up
+        // default-list un-save then answered 404 because the item was not in "Wishlist".
+        Wishlist summer = existingWishlist(1L, "Summer");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user(1L)));
+        when(productRepository.findById(1101L)).thenReturn(Optional.of(product(1101L)));
+
+        GetWishlistResponseDto result = service.addItem(1L, null,
+                AddToWishlistRequestDto.builder().productId(1101L).build());
+
+        assertEquals(WishlistServiceImpl.DEFAULT_NAME, result.getName());
+        assertEquals(1, result.getItemCount());
+        assertEquals(0, items.stream().filter(item -> listId(item).equals(summer.getId())).count());
+    }
+
+    @Test
+    void removeItem_fromTheDefaultList_resolvesTheNamedListInsteadOfTheOldestRow() {
+        existingWishlist(1L, "Summer");
+        Wishlist def = existingWishlist(1L, WishlistServiceImpl.DEFAULT_NAME);
+        WishlistItem saved = WishlistItem.builder().wishlist(def).product(product(1101L)).build();
+        saved.setId(72L);
+        items.add(saved);
+
+        service.removeItem(1L, null, 1101L);
+
+        assertEquals(0, items.size());
     }
 
     @Test

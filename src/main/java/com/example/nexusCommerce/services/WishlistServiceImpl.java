@@ -3,6 +3,7 @@ package com.example.nexusCommerce.services;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -51,7 +52,7 @@ public class WishlistServiceImpl implements WishlistService {
     @Transactional(readOnly = true)
     @Override
     public GetWishlistResponseDto getMyWishlist(Long userId) {
-        return wishlistRepository.findFirstByUserIdOrderByCreatedAtAsc(userId)
+        return findDefaultWishlist(userId)
                 .map(wishlist -> withItems(wishlist, userId))
                 .orElseGet(() -> GetWishlistResponseDto.builder()
                         .name(DEFAULT_NAME)
@@ -153,7 +154,7 @@ public class WishlistServiceImpl implements WishlistService {
         // A removal never materialises the default list: unlike addItem, there is nothing to
         // save here, and creating a row just to report that it holds nothing would be wrong.
         Wishlist wishlist = wishlistId == null
-                ? wishlistRepository.findFirstByUserIdOrderByCreatedAtAsc(userId)
+                ? findDefaultWishlist(userId)
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Product " + productId + " is not saved in a wishlist yet"))
                 : requireOwned(userId, wishlistId);
@@ -164,13 +165,22 @@ public class WishlistServiceImpl implements WishlistService {
     }
 
     private Wishlist findOrCreateDefault(Long userId) {
-        return wishlistRepository.findFirstByUserIdOrderByCreatedAtAsc(userId)
+        return findDefaultWishlist(userId)
                 .orElseGet(() -> {
                     User user = userRepository.findById(userId)
                             .orElseThrow(() -> new ResourceNotFoundException(
                                     "User with id: " + userId + " Not Found!"));
                     return wishlistRepository.save(Wishlist.builder().user(user).name(DEFAULT_NAME).build());
                 });
+    }
+
+    /**
+     * The default list is the one named "Wishlist", not simply the oldest row: a shopper can
+     * create a named list before saving anything, and that list must not silently become the
+     * target of every "save to default" call.
+     */
+    private Optional<Wishlist> findDefaultWishlist(Long userId) {
+        return wishlistRepository.findByUserIdAndNameIgnoreCase(userId, DEFAULT_NAME);
     }
 
     /** Ownership is checked in one place so every entry point shares the same rule. */
