@@ -125,7 +125,7 @@ window; that is expected.
      bytes**; JJWT rejects shorter HMAC-SHA keys and the app aborts at startup with a
      `JWT_SECRET must be at least 32 bytes` message. Rotating it signs every user out.
    - `CORS_ALLOWED_ORIGINS` — comma-separated **Vercel URL and the Render URL itself**:
-     `https://plain-thread.vercel.app,https://nexus-commerce-api.onrender.com`.
+     `https://nexus-commerce.vercel.app,https://nexus-commerce-api.onrender.com`.
      Swagger UI posts from the API's own origin and is subject to the same filter.
 3. Leave `PORT` unset; Render injects it and `server.port: ${PORT}` picks it up.
 4. Deploy. First boot runs the Flyway Postgres migrations, then `ddl-auto: validate` proves

@@ -41,7 +41,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 
 Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed sign-ins and registration attempts share one IP-keyed Redis fixed-window counter (§17.2).
 
-All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V26`) and Hibernate runs in `validate` mode only.
+All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V28`) and Hibernate runs in `validate` mode only.
 
 Observability ships in two layers: **Spring Boot Actuator + Micrometer + Prometheus** for self-hosted metrics (admin-gated), and the **New Relic Java APM agent** attached on `bootRun` when its jar is present. The HTTP server shuts down gracefully on SIGTERM.
 
@@ -63,7 +63,7 @@ Deployment is a multi-stage **Dockerfile** (Temurin 21 build → non-root runtim
 | **Spring Data JPA** | Repositories, ORM | (via starter) |
 | **Hibernate** | JPA provider, `ddl-auto: validate` | 7.x |
 | **MySQL** | Primary database | 8.4 / 9.6 validated |
-| **Flyway** | Versioned SQL migrations (`V1`–`V26`, mirrored for PostgreSQL) | (via starter) |
+| **Flyway** | Versioned SQL migrations (`V1`–`V28`, mirrored for PostgreSQL) | (via starter) |
 | **Redis + Lettuce** | Spring Cache backend, refresh tokens, JWT blacklist, login rate limit, idempotency replay | Spring Data Redis |
 | **Lombok** | Boilerplate reduction | compileOnly |
 | **springdoc-openapi** | Swagger UI / OpenAPI 3 (+ bearer scheme) | 2.8.5 |
@@ -112,7 +112,7 @@ CREATE DATABASE nexuscommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 3. Ensure a user can connect to `localhost:3306` with rights on `nexuscommerce`.
 
-**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V26` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
+**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V28` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
 
 ### 3.3 Redis setup
 
@@ -527,12 +527,14 @@ Design guarantees that are worth knowing before modifying the domain:
 | `V18__product_metadata` | brand, material, care, gender, compare-at price, slug, `is_active` (hide without soft-deleting order history); legacy rows backfilled |
 | `V19__wishlists` | `wishlists` + `wishlist_items`, one default list per user plus named lists; live `(user, name)` uniqueness via a generated column so a soft-deleted list frees the name |
 | `V20__addresses_payment_and_variant_scoped_lines` | `addresses`, payment reference columns, and `variant_id` on order/cart lines. New orders snapshot the shipping address as JSON so editing a saved address cannot rewrite history |
-| `V21__seed_plain_thread_catalogue` | Plain Thread seed: ~30 apparel products × 4 sizes × 3 colours (360 SKUs). Soft-deletes the pre-Phase-2 demo catalogue so its orders and reviews survive |
+| `V21__seed_plain_thread_catalogue` | Nexus Commerce seed (the migration keeps its original filename): ~30 apparel products × 4 sizes × 3 colours (360 SKUs). Soft-deletes the pre-Phase-2 demo catalogue so its orders and reviews survive |
 | `V22__variant_scoped_cart_lines` | Completes the variant swap on carts: every live line gets a `variant_id`, the column becomes NOT NULL, and live uniqueness moves from `(cart, product)` to `(cart, variant)` so a Medium and a Large of the same shirt can coexist |
 | `V23__razorpay_payment_tracking` | `payment_intent_id` (our reference before money moves) and `paid_datetime`, indexed for the webhook lookup that arrives with no user context |
 | `V24__remember_intent_amount` | `payment_amount_paise`, the price the stored intent was issued at — see the payment section for why a repeat request must not silently replace it |
 | `V25__product_review_count` | `products.review_count` so a card can distinguish "never reviewed" (curated seed rating) from "reviews average to 0" |
 | `V26__backfill_review_counts_and_scale` | Converts legacy 10-point ratings to the 1–5 scale (`rating / 2`), then backfills `review_count` and the live average from non-deleted reviews |
+| `V27__order_lookup_indexes` | PostgreSQL-only indexes on the referencing side of every FK (`orders.user_id`, `order_products.order_id`); MySQL already creates them, so its twin is empty and only keeps the sets version-aligned |
+| `V28__rebrand_catalogue_brand` | Rewrites the seeded brand from "Plain Thread" to "Nexus Commerce". V21 is left byte-for-byte intact because Flyway validates the checksum of applied migrations |
 
 > **Why V7 uses a stored procedure.** On a fresh MySQL 8.4 database, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` makes the server **automatically drop** the FK-supporting index `fk_review_order`, because the composite already covers it. An unconditional `DROP INDEX fk_review_order` therefore fails with `1091 Can't DROP` — exactly what broke CI before commit `2afc8e8`. V7 now wraps both drops in `drop_index_if_present`, which reads `information_schema.STATISTICS` first and no-ops when the index isn't there. This lets one migration apply cleanly to both fresh CI databases and older dev databases that pre-date the composite.
 
@@ -822,7 +824,7 @@ and update uses it to clear the column (this is how the admin editor unsets a va
   "rating": 4.5,
   "stock": 25,
   "slug": "organic-cotton-crew-tee",
-  "brand": "Plain Thread",
+  "brand": "Nexus Commerce",
   "material": "100% organic cotton",
   "careInstructions": "Machine wash cold",
   "gender": "UNISEX",
@@ -1448,7 +1450,7 @@ The frontend refuses to start if `API_BASE_URL` is unset (see `src/lib/api/backe
 
 ## 19. Phase 2a — apparel catalogue, wishlists, addresses and payments
 
-Everything the "PLAIN THREAD" storefront needs that a generic demo catalogue could not give it.
+Everything the "NEXUS COMMERCE" storefront needs that a generic demo catalogue could not give it.
 
 ### Variants are the unit of stock
 
@@ -1534,9 +1536,9 @@ parcel went.
   "line2": null,
   "city": "Bengaluru",
   "state": "Karnataka",
-  "pincode": "560001",
-  "isDefaultShipping": true,
-  "isDefaultBilling": true
+  "postalCode": "560001",
+  "defaultShipping": true,
+  "defaultBilling": true
 }
 
 // PUT /api/v1/addresses/{id}/default?shipping=true&billing=false
@@ -1662,7 +1664,7 @@ average catches up with the evicted caches.
 |-------|-------|
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
-| Schema version (Flyway) | **V26** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
+| Schema version (Flyway) | **V28** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
 | Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.

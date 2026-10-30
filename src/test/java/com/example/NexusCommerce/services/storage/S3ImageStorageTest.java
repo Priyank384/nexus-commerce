@@ -33,7 +33,7 @@ class S3ImageStorageTest {
 
     @BeforeEach
     void setUp() {
-        storage = new S3ImageStorage(client, "plain-thread", "products", "https://cdn.example.com/");
+        storage = new S3ImageStorage(client, "nexus-commerce", "products", "https://cdn.example.com/");
     }
 
     @Test
@@ -45,7 +45,7 @@ class S3ImageStorageTest {
 
         ArgumentCaptor<PutObjectRequest> request = ArgumentCaptor.forClass(PutObjectRequest.class);
         verify(client).putObject(request.capture(), any(RequestBody.class));
-        assertEquals("plain-thread", request.getValue().bucket());
+        assertEquals("nexus-commerce", request.getValue().bucket());
         assertTrue(request.getValue().key().startsWith("products/"));
         assertEquals("image/png", request.getValue().contentType());
         assertEquals("public, max-age=31536000, immutable", request.getValue().cacheControl());
@@ -69,7 +69,7 @@ class S3ImageStorageTest {
 
         ArgumentCaptor<DeleteObjectRequest> request = ArgumentCaptor.forClass(DeleteObjectRequest.class);
         verify(client).deleteObject(request.capture());
-        assertEquals("plain-thread", request.getValue().bucket());
+        assertEquals("nexus-commerce", request.getValue().bucket());
         assertEquals("products/abc.png", request.getValue().key());
     }
 

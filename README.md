@@ -2,7 +2,7 @@
 
 > **Full project guide:** [PROJECT_DOCUMENTATION.md](./PROJECT_DOCUMENTATION.md) — setup, tech stack, architecture, API flows, payloads, Redis keys, real-life scenarios, and testing checklists.
 
-NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("Plain Thread") and a general e-commerce domain: **hierarchic categories**, **products** with per-**variant** (size + colour) stock, a persistent **shopping cart**, **orders** (with snapshotted, variant-scoped line items), **reviews** tied to both an order and a product, **wishlists**, **address book**, and **Razorpay payments**. It is secured with **JWT authentication** (access + rotating refresh token, Redis-backed revocation) and **role-based authorization** (`USER` / `ADMIN`), backed by **MySQL or PostgreSQL** (chosen by env, with a parallel Flyway set per dialect), versioned by **Flyway** migrations with `ddl-auto: validate`, cached in **Redis**, observable through **Actuator + Micrometer/Prometheus** and optionally the **New Relic** APM agent, containerised via a multi-stage **Dockerfile**, and shipped with a **GitHub Actions** CI that boots the app against real MySQL + Redis.
+NexusCommerce is a **Spring Boot** REST backend for a real apparel storefront ("Nexus Commerce") and a general e-commerce domain: **hierarchic categories**, **products** with per-**variant** (size + colour) stock, a persistent **shopping cart**, **orders** (with snapshotted, variant-scoped line items), **reviews** tied to both an order and a product, **wishlists**, **address book**, and **Razorpay payments**. It is secured with **JWT authentication** (access + rotating refresh token, Redis-backed revocation) and **role-based authorization** (`USER` / `ADMIN`), backed by **MySQL or PostgreSQL** (chosen by env, with a parallel Flyway set per dialect), versioned by **Flyway** migrations with `ddl-auto: validate`, cached in **Redis**, observable through **Actuator + Micrometer/Prometheus** and optionally the **New Relic** APM agent, containerised via a multi-stage **Dockerfile**, and shipped with a **GitHub Actions** CI that boots the app against real MySQL + Redis.
 
 ---
 
@@ -191,7 +191,7 @@ RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
    ./gradlew bootRun
    ```
 
-   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V26`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Plain Thread" seed catalogue, wishlists, addresses, the payment columns and review counts).
+   On first startup, **Flyway** creates and updates tables (migrations `V1`–`V26`, including `reviews`, `users`, roles, stock, order snapshots, shopping carts, the category tree, product variants, the "Nexus Commerce" seed catalogue, wishlists, addresses, the payment columns and review counts).
 
    To run on **PostgreSQL** instead (validated against Supabase), set the `DB_*` keys plus `FLYWAY_LOCATIONS=classpath:db/migration-postgres` in `.env` and start the app — no other change is needed. The MySQL set and the PostgreSQL set are edited together; every version has a twin.
 
@@ -392,7 +392,7 @@ Owner-scoped; `GET /wishlist` returns the caller's default list with its items.
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/` | The caller's addresses, default-first. |
-| `POST` | `/` | Save (`SaveAddressRequestDto`: `recipientName`, `phone`, `line1`, optional `line2`, `city`, `state`, `pincode`, `country`, `label`, `defaultShipping`, `defaultBilling`). The **first** address becomes both defaults. |
+| `POST` | `/` | Save (`SaveAddressRequestDto`: `recipientName`, `phone`, `line1`, optional `line2`, `city`, `state`, `postalCode`, `country`, `label`, `defaultShipping`, `defaultBilling`). The **first** address becomes both defaults. |
 | `PUT` | `/{id}` | Edit an address. |
 | `DELETE` | `/{id}` | Delete one; if it held a default, the oldest remaining address is promoted so checkout never loses its pick. |
 | `PUT` | `/{id}/default?shipping=true&billing=false` | Make it the shipping and/or billing default — exactly one default per kind per user. |
@@ -404,7 +404,7 @@ Owner-scoped; `GET /wishlist` returns the caller's default list with its items.
 | `POST` | `/razorpay/orders/{orderId}` | Owner | Create (or reuse) the Razorpay intent for the order → `keyId`, `razorpayOrderId`, `amount` in **paise**, `currency`, `totalPrice`. **400** if the order is already paid or prices below the gateway's ₹1 floor. |
 | `POST` | `/razorpay/orders/{orderId}/verify` | Owner | Verify `razorpayPaymentId` + `razorpaySignature` against the **stored** intent, then settle. Replaying it returns the same `PAID` status and never mails twice. |
 | `GET` | `/orders/{orderId}/status` | Owner | Payment + gateway references for the order. |
-| `POST` | `/razorpay/webhook` | **Public** (HMAC-authenticated) | Razorpay posts here. The body is read as raw bytes and HMAC-verified with `RAZORPAY_WEBHOOK_SECRET`; a mismatch → **400**. Unknown intents still return **2xx** so the gateway stops retrying. |
+| `POST` | `/razorpay/webhook` | **Public** (HMAC-authenticated) | Razorpay posts here. The body is read as raw bytes and HMAC-verified with `RAZORPAY_WEBHOOK_SECRET`; a mismatch → **401**. Unknown intents still return **2xx** so the gateway stops retrying. |
 
 ### Orders — `/api/v1/orders`
 
@@ -520,14 +520,16 @@ Several guarantees are worth knowing before you touch the domain:
 | `V18` | Product metadata: `brand`, `material`, `care_instructions`, `gender`, `compare_at_price`, `is_active`, `slug` + live-unique slug. |
 | `V19` | `wishlists` + `wishlist_items` — one live list per `(user, name)`, one live item per `(wishlist, product)`. |
 | `V20` | `addresses`; payment columns on `orders` (`address_snapshot`, `payment_provider`, `payment_ref`, `payment_status`); variant snapshot on `order_products`; `variant_id` on `cart_items`. |
-| `V21` | Seed the "Plain Thread" apparel catalogue (categories, products, size × colour variants). |
+| `V21` | Seed the "Nexus Commerce" apparel catalogue (categories, products, size × colour variants). |
 | `V22` | Variant-scoped cart lines — `variant_id` becomes `NOT NULL` and live uniqueness moves from `(cart, product)` to `(cart, variant)`, so a shopper can hold a Medium and a Large of the same shirt. Unresolvable live lines are removed rather than left ambiguous. |
 | `V23` | Razorpay references on `orders`: `payment_intent_id` (what the signature check and the webhook lookup key on, indexed) and `paid_datetime`. |
 | `V24` | `orders.payment_amount_paise` — remembers what the stored intent was priced at, so a repeat `createPayment` can tell whether reusing it is still correct. |
 | `V25` | `products.review_count` — denormalised live-review count beside the rating so listings do not aggregate on every read. |
 | `V26` | Backfill: converts pre-Phase-5 reviews from the 10-point scale to 1–5, then recomputes `review_count` and the live-average `rating` for products that already hold reviews. |
+| `V27` | Order lookup indexes. PostgreSQL gets explicit indexes on the referencing side of every FK (`orders.user_id`, `order_products.order_id`); MySQL already creates these, so its twin is intentionally empty and only keeps the two sets version-aligned. |
+| `V28` | Rebrand: rewrites the seeded product brand from "Plain Thread" to "Nexus Commerce" without touching V21, whose checksum Flyway validates. |
 
-Every version above has a PostgreSQL twin in `src/main/resources/db/migration-postgres` (same filenames, dialect-correct DDL); the two sets are checked to be the same 26 files.
+Every version above has a PostgreSQL twin in `src/main/resources/db/migration-postgres` (same filenames, dialect-correct DDL); the two sets are checked to be the same 28 files.
 
 > **MySQL 8.4 note on V7.** On a fresh MySQL 8.4 DB, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` causes the server to drop the FK-supporting index `fk_review_order` automatically. An unconditional `DROP INDEX fk_review_order` then fails with `1091 Can't DROP`. V7 wraps both drops in a stored procedure that checks `information_schema.STATISTICS` before issuing the DDL, so it applies cleanly on **fresh MySQL 8.4** databases and on **older dev databases** that pre-date the composite.
 
