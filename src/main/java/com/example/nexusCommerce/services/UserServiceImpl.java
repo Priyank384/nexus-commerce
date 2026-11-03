@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
+import com.example.nexusCommerce.dtos.UpdateProfileRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
@@ -50,6 +51,17 @@ public class UserServiceImpl implements UserService {
     public GetUserResponseDto getProfile(Long userId) {
         return userAdapter.mapToGetUserResponseDto(userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Authenticated user no longer exists")));
+    }
+
+    @Transactional
+    @Override
+    public GetUserResponseDto updateProfile(Long userId, UpdateProfileRequestDto requestDto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user no longer exists"));
+        user.setName(requestDto.getName().trim());
+        user.setPhone(requestDto.getPhone() == null || requestDto.getPhone().isBlank()
+                ? null : requestDto.getPhone().trim());
+        return userAdapter.mapToGetUserResponseDto(userRepository.save(user));
     }
 
     private static String normalizeEmail(String email) {

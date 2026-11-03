@@ -107,6 +107,26 @@ services:
       - key: ADMIN_BOOTSTRAP_NAME
         sync: false
 
+      # --- transactional email (order confirmations, password-reset links) ---
+      # Leave MAIL_ENABLED unset to keep the logging sender, which is what a preview or a
+      # service without a verified sending domain should do. MAIL_PASSWORD is the relay
+      # credential; STOREFRONT_BASE_URL must be the deployed storefront origin or every
+      # emailed link points at localhost.
+      - key: MAIL_ENABLED
+        sync: false
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: STOREFRONT_BASE_URL
+        sync: false
+
       # Free-tier JVM sizing: serial GC and a smaller ceiling leave room for the
       # metaspace + thread stacks inside 512 MB. IPv4 is forced because Supabase's
       # direct host and some pooler endpoints resolve to IPv6 the container cannot reach.

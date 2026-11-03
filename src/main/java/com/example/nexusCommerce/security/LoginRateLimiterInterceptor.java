@@ -42,6 +42,7 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
 
     private static final String PREFIX = "rate::login::";
     private static final String LOGIN_PATH = "/api/v1/auth/login";
+    private static final String FORGOT_PATH = "/api/v1/auth/forgot-password";
     private static final String REGISTER_PATH = "/api/v1/users";
 
     private final ObjectProvider<StringRedisTemplate> redisProvider;
@@ -86,7 +87,7 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
     /** Refresh is deliberately absent: it is a session operation, not a credential guess. */
     private static boolean limited(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        if (LOGIN_PATH.equals(uri)) {
+        if (LOGIN_PATH.equals(uri) || FORGOT_PATH.equals(uri)) {
             return true;
         }
         // /api/v1/users is shared with GET /me and the admin list; only its POST (register)
@@ -100,7 +101,12 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
         try {
             String key = PREFIX + ip;
             Long count = redis.opsForValue().increment(key);
-            if (count != null && count == 1L) {
+            if (count == null) return null;
+            // INCR arms the window only on the first write, so a key that somehow has no expiry -
+            // an EXPIRE lost to a timeout, or a counter left by an older build - would keep its
+            // tally forever and lock this caller out of sign-in, registration and password
+            // recovery for good. Re-arm whenever the window is missing, not just when it is new.
+            if (count == 1L || windowMissing(redis.getExpire(key))) {
                 redis.expire(key, Duration.ofSeconds(windowSeconds));
             }
             return count;
@@ -110,6 +116,11 @@ public class LoginRateLimiterInterceptor implements HandlerInterceptor {
             log.warn("Login rate limit counter unreadable for {}; allowing the attempt. {}", ip, e.getMessage());
             return null;
         }
+    }
+
+    /** Redis reports -1 for a key with no TTL and -2 for a missing key; either way the window is gone. */
+    private static boolean windowMissing(Long remainingSeconds) {
+        return remainingSeconds == null || remainingSeconds < 0;
     }
 
     private Long read(String ip) {

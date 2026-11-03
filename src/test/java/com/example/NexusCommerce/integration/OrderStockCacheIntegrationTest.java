@@ -39,6 +39,7 @@ import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
+import com.example.nexusCommerce.security.ShopperIdentity;
 import com.example.nexusCommerce.services.OrderService;
 import com.example.nexusCommerce.services.VariantResolver;
 
@@ -125,7 +126,7 @@ class OrderStockCacheIntegrationTest {
                         .variantId(11L)
                         .quantity(1)
                         .build()))
-                .build(), 7L);
+                .build(), new ShopperIdentity(7L, null));
 
         assertProductReadModelsEvicted();
     }

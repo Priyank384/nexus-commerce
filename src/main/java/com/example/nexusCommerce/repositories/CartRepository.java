@@ -15,6 +15,10 @@ public interface CartRepository extends JpaRepository<Cart, Long> {
     @EntityGraph(attributePaths = {"items", "items.product", "items.variant"})
     Optional<Cart> findByUserId(Long userId);
 
+    /** The same cart for a shopper with no account, keyed by the session credential they hold. */
+    @EntityGraph(attributePaths = {"items", "items.product", "items.variant"})
+    Optional<Cart> findByGuestToken(String guestToken);
+
     @EntityGraph(attributePaths = {"items", "items.product", "items.variant"})
     Optional<Cart> findById(Long id);
 }

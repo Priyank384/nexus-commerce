@@ -43,6 +43,10 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	// Transactional email (order confirmation, password reset). The sender bean only
+	// replaces the logging fallback when app.mail.enabled=true, so a checkout with no
+	// SMTP credentials still boots and tests stay green.
+	implementation 'org.springframework.boot:spring-boot-starter-mail'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'

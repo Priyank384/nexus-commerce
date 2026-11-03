@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
@@ -18,9 +19,13 @@ import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.cache.RedisCacheWriter;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+import com.example.nexusCommerce.cache.EpochGuardedCacheManager;
+import com.example.nexusCommerce.cache.RedisCacheEpochs;
 
 import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
@@ -64,7 +69,8 @@ public class CacheConfig implements CachingConfigurer {
 
     @Bean
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis", matchIfMissing = true)
-    public RedisCacheManager redisCacheManager(RedisConnectionFactory connectionFactory) {
+    public CacheManager redisCacheManager(RedisConnectionFactory connectionFactory,
+            StringRedisTemplate redisTemplate) {
         String namespace = datasourceNamespace(datasourceUrl);
         // Null values are cached by default, which is what we want: a request for a
         // non-existent id must not reach the database on every call.
@@ -91,13 +97,17 @@ public class CacheConfig implements CachingConfigurer {
                 Map.entry(REVIEW_BY_PRODUCT, list),
                 Map.entry(REVIEW_BY_ORDER, list));
 
-        return RedisCacheManager.builder(connectionFactory)
+        RedisCacheManager redisCaches = RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(list)
                 .withInitialCacheConfigurations(perCache)
                 // Defer put/evict/clear until the surrounding transaction commits, so a
                 // concurrent reader cannot repopulate a cache with pre-commit state.
                 .transactionAware()
                 .build();
+
+        // Deferring the eviction is necessary but not sufficient: a reader whose database load
+        // spans the commit still writes what it read beforehand. The guard drops those writes.
+        return new EpochGuardedCacheManager(redisCaches, new RedisCacheEpochs(redisTemplate, namespace));
     }
 
     // Boot 4 only auto-configures a CacheManager through the cache starter, which this

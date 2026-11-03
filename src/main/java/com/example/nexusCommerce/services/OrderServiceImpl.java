@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -35,6 +36,7 @@ import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
 import com.example.nexusCommerce.dtos.OrderItemActionDto;
 import com.example.nexusCommerce.dtos.OrderItemRequestDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
+import com.example.nexusCommerce.dtos.ShippingAddressRequestDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
 import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
@@ -54,13 +56,17 @@ import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
+import com.example.nexusCommerce.security.OpaqueToken;
+import com.example.nexusCommerce.security.ShopperIdentity;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderServiceImpl implements OrderService {
 
     private final OrderRepository orderRepository;
@@ -146,17 +152,33 @@ public class OrderServiceImpl implements OrderService {
             @CacheEvict(cacheNames = { PRODUCT_ALL, PRODUCT_BY_ID, PRODUCT_BY_SLUG, PRODUCT_DETAILS, PRODUCT_BY_CATEGORY, PRODUCT_SEARCH }, allEntries = true)
     })
     @Override
-    public GetOrderResponseDto createOrder(CreateOrderRequestDto createOrderRequestDto, Long authenticatedUserId){
-        if (authenticatedUserId == null) {
-            throw new InvalidRequestException("An authenticated user is required to create an order");
+    public GetOrderResponseDto createOrder(CreateOrderRequestDto createOrderRequestDto, ShopperIdentity shopper){
+        if (shopper == null) {
+            throw new InvalidRequestException("An authenticated user or a guest session is required to create an order");
         }
-        User user = userRepository.findById(authenticatedUserId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + authenticatedUserId));
+        boolean isGuest = shopper.isGuest();
+        String guestEmail = createOrderRequestDto.getEmail();
+        if (isGuest) {
+            // Nothing else can reach the buyer: no account, no address book, no saved email.
+            if (guestEmail == null || guestEmail.isBlank()) {
+                throw new InvalidRequestException("An email is required to check out as a guest");
+            }
+        }
+        User user = isGuest ? null
+                : userRepository.findById(shopper.userId())
+                        .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + shopper.userId()));
 
         Order order = Order.builder()
                         .status(OrderStatus.PENDING)
                         .user(user)
-                        .addressSnapshot(snapshotOf(createOrderRequestDto.getAddressId(), authenticatedUserId))
+                        .addressSnapshot(snapshotOf(createOrderRequestDto, shopper))
+                        // The session that placed the order keeps the right to pay for it, which
+                        // is how a guest finishes Razorpay without ever holding a token.
+                        .guestToken(isGuest ? shopper.guestToken() : null)
+                        .guestEmail(isGuest ? guestEmail.trim() : null)
+                        // Minted only for a guest order: it is the one credential safe to mail,
+                        // because it unlocks this order and nothing else the session can reach.
+                        .claimToken(isGuest ? OpaqueToken.mint() : null)
                         .build();
 
         orderRepository.save(order);
@@ -205,7 +227,7 @@ public class OrderServiceImpl implements OrderService {
         // The line items are already in the persistence context with products resolved,
         // so the response costs no extra query.
         events.publishEvent(new com.example.nexusCommerce.events.OrderPlacedEvent(
-                order.getId(), order.getUser().getId(), java.time.Instant.now()));
+                order.getId(), user != null ? user.getId() : null, java.time.Instant.now()));
         return orderAdapter.mapToGetOrderResponseDto(order, savedItems);
     }
 
@@ -442,7 +464,7 @@ public class OrderServiceImpl implements OrderService {
         if (callerId == null) {
             throw new ForbiddenException("You can only modify your own orders");
         }
-        boolean owner = order.getUser() != null && callerId.equals(order.getUser().getId());
+        boolean owner = order.ownedByUser(callerId);
         if (!callerIsAdmin && !owner) {
             throw new ForbiddenException("You can only modify your own orders");
         }
@@ -526,17 +548,74 @@ public class OrderServiceImpl implements OrderService {
     /**
      * The order keeps its own copy: the address book entry it pointed at may be edited or
      * deleted later, and neither may change where a placed order was sent.
+     *
+     * <p>An inline destination wins over a saved one because the storefront sends the form the
+     * shopper actually filled in, and a stale {@code addressId} left over from an earlier step
+     * must not quietly overrule it.
      */
-    private AddressSnapshot snapshotOf(Long addressId, Long userId) {
+    private AddressSnapshot snapshotOf(CreateOrderRequestDto request, ShopperIdentity shopper) {
+        ShippingAddressRequestDto inline = request.getShipping();
+        if (inline != null) {
+            return AddressSnapshot.builder()
+                    .recipientName(inline.getRecipientName())
+                    .phone(inline.getPhone())
+                    .line1(inline.getLine1())
+                    .line2(inline.getLine2())
+                    .city(inline.getCity())
+                    .state(inline.getState())
+                    .postalCode(inline.getPostalCode())
+                    // The address book's column is NOT NULL and this store ships domestically,
+                    // so an absent country means that rather than an empty field.
+                    .country(inline.getCountry() == null || inline.getCountry().isBlank()
+                            ? "IN" : inline.getCountry().toUpperCase(Locale.ROOT))
+                    .build();
+        }
+        Long addressId = request.getAddressId();
         if (addressId == null) {
+            if (shopper.isGuest()) {
+                throw new InvalidRequestException("A shipping address is required to place an order");
+            }
             return null;
         }
         Address address = addressRepository.findById(addressId)
                 .orElseThrow(() -> new ResourceNotFoundException("Address with id: " + addressId + " Not Found!"));
-        if (!userId.equals(address.getUserId())) {
-            throw new ForbiddenException("Address " + addressId + " does not belong to user " + userId);
+        // A guest has no address book, so there is no id it could legitimately name here.
+        if (shopper.isGuest() || !shopper.userId().equals(address.getUserId())) {
+            throw new ForbiddenException("Address " + addressId + " does not belong to this shopper");
         }
         return AddressSnapshot.from(address);
+    }
+
+    /**
+     * Moves a guest order onto an account. The link is single-use by construction: claiming
+     * clears the token, so a forwarded email cannot hand the same order to a second account.
+     *
+     * <p>{@code allEntries} eviction because a claimed order's cached read model still names no
+     * owner, and the id is only known after the token lookup.
+     */
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = { ORDER_ALL, ORDER_BY_ID, ORDER_SUMMARY }, allEntries = true)
+    })
+    @Override
+    public GetOrderResponseDto claimOrder(String claimToken, Long userId) {
+        Long orderId = orderRepository.findByClaimToken(claimToken)
+                .map(Order::getId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "That claim link is not valid, has already been used, or belongs to a deleted order"));
+        // Lock the row a second time: two accounts opening the same forwarded link would
+        // otherwise both attach it, and the loser would see no error and no order.
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+        User account = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        order.setUser(account);
+        order.setGuestToken(null);
+        order.setClaimToken(null);
+        orderRepository.save(order);
+        log.info("Order {} claimed by user {}", orderId, userId);
+        return orderAdapter.mapToGetOrderResponseDto(
+                order, orderProductsRepository.findByOrderWithProduct(order));
     }
 
     /**

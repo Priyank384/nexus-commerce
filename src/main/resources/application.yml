@@ -21,7 +21,12 @@ spring:
       # five idle connections just produces "This connection has been closed" churn and
       # can wedge a long migration, so idle count is tunable and defaults low.
       minimum-idle: ${DB_MIN_IDLE:5}
-      connection-timeout: 3000
+      # A remote pooler session costs a TLS handshake plus a backend spawn, and the pool pays
+      # that inside the request whenever it has been drained — a Supavisor idle kill, a pooler
+      # restart, the first hit after boot. Hikari's own default is 30s; 3s turned those moments
+      # into "Connection is not available" and a 500 on an ordinary catalogue read. Keep the
+      # tighter budget available for a co-located database.
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:10000}
       keepalive-time: 30000
       # Below the typical pooler idle timeout, so connections are recycled by us first.
       max-lifetime: 300000
@@ -57,6 +62,25 @@ spring:
       max-request-size: 6MB
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  mail:
+    # Empty host means "no mail server", and NotificationConfig then keeps the logging
+    # fallback even if MAIL_ENABLED slipped through. Credentials come from .env:
+    # MAIL_HOST, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD.
+    host: ${MAIL_HOST:}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+          # A dead SMTP host must not park a request thread for the JVM default.
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
   data:
     redis:
       # One URL covers every topology: redis://host:port for a local server,
@@ -96,6 +120,13 @@ management:
       show-details: when-authorized
       probes:
         enabled: true
+  health:
+    mail:
+      # Sending is best-effort by design — SmtpNotificationService logs and swallows a transport
+      # failure because an unreachable inbox must not undo a captured payment. The probe has to
+      # agree: with it on, an unconfigured or dead SMTP host drags /actuator/health to DOWN and
+      # the platform restarts a store that is serving shoppers fine.
+      enabled: false
   metrics:
     tags:
       application: ${spring.application.name}
@@ -137,6 +168,19 @@ app:
     login:
       max: ${LOGIN_RATE_MAX:10}
       window-seconds: ${LOGIN_RATE_WINDOW_SECONDS:60}
+  auth:
+    # Password-reset link lifetime and the per-account quiet period between sends. Exposed as
+    # placeholders so .env can tune them: the relaxed APP_AUTH_* env-name binding only applies
+    # to real OS environment variables, not to the imported properties file.
+    reset-token-ttl-minutes: ${RESET_TOKEN_TTL_MINUTES:15}
+    reset-send-cooldown-seconds: ${RESET_SEND_COOLDOWN_SECONDS:60}
+  mail:
+    # Off unless MAIL_ENABLED=true, which keeps the logging sender live. Set it together
+    # with MAIL_HOST/MAIL_USERNAME/MAIL_PASSWORD (Resend, Postmark, SES all speak SMTP).
+    enabled: ${MAIL_ENABLED:false}
+    from: ${MAIL_FROM:Nexus Commerce <noreply@nexuscommerce.test>}
+    # Base URL every shopper-facing email link is built against; the storefront's deployed origin.
+    storefront-base-url: ${STOREFRONT_BASE_URL:http://localhost:3000}
   admin:
     bootstrap:
       # Dev/test only. Empty by default, which makes AdminBootstrap inert. Setting both creates

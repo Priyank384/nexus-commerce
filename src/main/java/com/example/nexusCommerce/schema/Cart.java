@@ -7,6 +7,7 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
@@ -30,9 +31,21 @@ import lombok.Setter;
 @Builder
 public class Cart extends BaseEntity {
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    /**
+     * Null on a guest cart. Exactly one of {@code user} and {@code guestToken} identifies the
+     * shopper; V29's two generated columns enforce that at most one live cart exists per
+     * identity of either kind.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    /**
+     * Opaque session credential minted by the server. Possession of it is the only proof a
+     * guest cart has, so it is a bearer secret and never echoed back in a response body.
+     */
+    @Column(name = "guest_token", length = 64)
+    private String guestToken;
 
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default

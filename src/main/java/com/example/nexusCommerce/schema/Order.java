@@ -35,9 +35,29 @@ import lombok.NoArgsConstructor;
 @SQLRestriction("deleted_datetime is NULL")
 public class Order extends BaseEntity{
     
+    /**
+     * Null on a guest order (V29). Readers must not dereference it blindly: use
+     * {@link #recipientEmail()} for mail and the identity helpers for ownership.
+     */
     @ManyToOne (fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    /** Where the confirmation mail goes for an order placed without an account. */
+    @Column(name = "guest_email")
+    private String guestEmail;
+
+    // The session that placed a guest order. It is the credential that may price, verify and
+    // poll that order's payment, which is how a shopper finishes Razorpay with no token at all.
+    // Cleared when the order is claimed, since the account owns it from then on.
+    @Column(name = "guest_token", length = 64)
+    private String guestToken;
+
+    // Separate from guestToken because it travels in an email: the session token also unlocks
+    // the cart and every other order of that browser, so only this single-order secret may be
+    // forwarded or opened on another device. Also cleared on claim, which retires the link.
+    @Column(name = "claim_token", length = 64)
+    private String claimToken;
 
     // V20's JSON column, written once at checkout and never touched again.
     @JdbcTypeCode(SqlTypes.JSON)
@@ -80,6 +100,19 @@ public class Order extends BaseEntity{
     @Version
     @Column(nullable = false)
     private Long version;
+
+    /** The address a receipt goes to: the account's email, or what the guest typed at checkout. */
+    public String recipientEmail() {
+        return user != null ? user.getEmail() : guestEmail;
+    }
+
+    public boolean ownedByUser(Long userId) {
+        return userId != null && user != null && userId.equals(user.getId());
+    }
+
+    public boolean ownedByGuestToken(String token) {
+        return token != null && token.equals(guestToken);
+    }
 
     // @ManyToMany
     // @JoinTable(

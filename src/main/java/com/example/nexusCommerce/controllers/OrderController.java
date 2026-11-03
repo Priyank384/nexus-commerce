@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.nexusCommerce.dtos.ClaimOrderRequestDto;
 import com.example.nexusCommerce.dtos.CreateOrderRequestDto;
 import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
@@ -21,6 +22,7 @@ import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
 import com.example.nexusCommerce.exceptions.ForbiddenException;
 import com.example.nexusCommerce.security.AuthenticatedUser;
 import com.example.nexusCommerce.security.IdempotencyService;
+import com.example.nexusCommerce.security.ShopperIdentity;
 import com.example.nexusCommerce.services.OrderService;
 import com.example.nexusCommerce.utils.ApiResponse;
 import com.example.nexusCommerce.utils.PageResponse;
@@ -61,24 +63,42 @@ public class OrderController {
             @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateOrderRequestDto requestDto,
             @AuthenticationPrincipal AuthenticatedUser caller) {
+        // Guest purchases go through the cart, where the session credential is exchanged for a
+        // claim link on the way out. This endpoint stays account-only: it has no cart to
+        // attribute a session to, so an anonymous caller could place an order nothing would let
+        // them ever come back for.
+        ShopperIdentity shopper = ShopperIdentity.require(caller, null);
         boolean useIdem = idempotencyKey != null && !idempotencyKey.isBlank();
         if (useIdem) {
-            var cached = idempotency.tryStart(caller.id(), IDEM_SCOPE, idempotencyKey);
+            var cached = idempotency.tryStart(shopper, IDEM_SCOPE, idempotencyKey);
             if (cached.isPresent()) {
                 return ResponseEntity.status(HttpStatus.CREATED).body(cached.get());
             }
         }
         GetOrderResponseDto order;
         try {
-            order = orderService.createOrder(requestDto, caller.id());
+            order = orderService.createOrder(requestDto, shopper);
         } catch (RuntimeException ex) {
-            if (useIdem) idempotency.release(caller.id(), IDEM_SCOPE, idempotencyKey);
+            if (useIdem) idempotency.release(shopper, IDEM_SCOPE, idempotencyKey);
             throw ex;
         }
         ApiResponse<GetOrderResponseDto> body =
                 ApiResponse.success(order, "Order Created Successfully");
-        if (useIdem) idempotency.complete(caller.id(), IDEM_SCOPE, idempotencyKey, body);
+        if (useIdem) idempotency.complete(shopper, IDEM_SCOPE, idempotencyKey, body);
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
+    @Operation(summary = "Claim an order bought as a guest",
+               description = "Attaches the order a claim token names to the signed-in caller and returns it. "
+                             + "The token is the one mailed with a guest's confirmation; it works once, and "
+                             + "claiming retires it, so a forwarded email cannot hand the same order to a second account.")
+    @PostMapping("/claim")
+    public ResponseEntity<ApiResponse<GetOrderResponseDto>> claimOrder(
+            @Valid @RequestBody ClaimOrderRequestDto requestDto,
+            @AuthenticationPrincipal AuthenticatedUser caller) {
+        ShopperIdentity shopper = ShopperIdentity.require(caller, null);
+        return ResponseEntity.ok(ApiResponse.success(
+                orderService.claimOrder(requestDto.getClaimToken(), shopper.userId()), "Order claimed"));
     }
 
     @Operation(summary = "Delete an order",

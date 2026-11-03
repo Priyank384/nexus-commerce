@@ -4,14 +4,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.example.nexusCommerce.dtos.ChangePasswordRequestDto;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
+import com.example.nexusCommerce.dtos.UpdateProfileRequestDto;
 import com.example.nexusCommerce.security.AuthenticatedUser;
+import com.example.nexusCommerce.services.AuthService;
 import com.example.nexusCommerce.services.UserService;
 import com.example.nexusCommerce.utils.ApiResponse;
 
@@ -28,6 +32,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class UserController {
 
     private final UserService userService;
+    private final AuthService authService;
 
     @Operation(summary = "Register a new account",
                description = "Public signup. Stores the password BCrypt-hashed and grants the USER role.")
@@ -46,6 +51,28 @@ public class UserController {
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(ApiResponse.success(
                 userService.getProfile(caller.id()), "Profile fetched"));
+    }
+
+    @Operation(summary = "Edit my profile",
+               description = "Changes the name and phone on the authenticated account. Email is the login "
+                           + "identity and is not editable here; it never leaves the row orders and addresses point at.")
+    @PatchMapping("/me")
+    public ResponseEntity<ApiResponse<GetUserResponseDto>> updateMyProfile(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @Valid @RequestBody UpdateProfileRequestDto requestDto) {
+        return ResponseEntity.ok(ApiResponse.success(
+                userService.updateProfile(caller.id(), requestDto), "Profile updated"));
+    }
+
+    @Operation(summary = "Change my password",
+               description = "Proves the current password before accepting a new one, then revokes every "
+                           + "refresh token on the account so other devices have to sign in again.")
+    @PostMapping("/me/password")
+    public ResponseEntity<ApiResponse<Void>> changeMyPassword(
+            @AuthenticationPrincipal AuthenticatedUser caller,
+            @Valid @RequestBody ChangePasswordRequestDto requestDto) {
+        authService.changePassword(caller.id(), requestDto);
+        return ResponseEntity.ok(ApiResponse.success(null, "Password changed"));
     }
 
 }

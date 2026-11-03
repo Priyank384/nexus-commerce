@@ -130,7 +130,8 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + requestDto.getOrderId()));
 
         // Identity is taken from the token, and a customer may only review their own order.
-        if (!order.getUser().getId().equals(authenticatedUserId)) {
+        // A guest order has no user row, so it can never match a caller here.
+        if (!order.ownedByUser(authenticatedUserId)) {
             throw new ForbiddenException("You can only review your own orders");
         }
 

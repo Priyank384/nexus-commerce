@@ -23,8 +23,10 @@ import lombok.extern.slf4j.Slf4j;
  * {@code Idempotency-Key} header; retries with the same key replay the first response
  * instead of placing a duplicate order.
  *
- * <p>Keys are scoped by the caller's user id AND the endpoint family so a leaked UUID
- * cannot cross user boundaries or collide with a differently-shaped call.
+ * <p>Keys are scoped by the caller's identity AND the endpoint family so a leaked UUID
+ * cannot cross user boundaries or collide with a differently-shaped call. A guest session is
+ * a principal too: its token takes the place of the user id, otherwise every anonymous retry
+ * would share one replay slot.
  *
  * <p>Redis is a soft dependency here: when it is unreachable the request proceeds without
  * a replay guarantee (logged) rather than failing checkout outright. The store's purpose is
@@ -54,8 +56,8 @@ public class IdempotencyService {
      * if this call is the first (and the caller has now been granted the lock), and
      * throws if a concurrent request with the same key is still running.
      */
-    public Optional<ApiResponse<GetOrderResponseDto>> tryStart(Long userId, String scope, String key) {
-        String redisKey = redisKey(userId, scope, key);
+    public Optional<ApiResponse<GetOrderResponseDto>> tryStart(ShopperIdentity caller, String scope, String key) {
+        String redisKey = redisKey(caller, scope, key);
         try {
             Boolean acquired = redis.opsForValue().setIfAbsent(redisKey, IN_FLIGHT, IN_FLIGHT_TTL);
             if (Boolean.TRUE.equals(acquired)) {
@@ -86,8 +88,9 @@ public class IdempotencyService {
         }
     }
 
-    public void complete(Long userId, String scope, String key, ApiResponse<GetOrderResponseDto> response) {
-        String redisKey = redisKey(userId, scope, key);
+    public void complete(ShopperIdentity caller, String scope, String key,
+            ApiResponse<GetOrderResponseDto> response) {
+        String redisKey = redisKey(caller, scope, key);
         try {
             String json = objectMapper.writeValueAsString(response);
             redis.opsForValue().set(redisKey, json, RESULT_TTL);
@@ -97,8 +100,8 @@ public class IdempotencyService {
     }
 
     /** Best-effort release so a subsequent retry can create the order if the first attempt failed. */
-    public void release(Long userId, String scope, String key) {
-        String redisKey = redisKey(userId, scope, key);
+    public void release(ShopperIdentity caller, String scope, String key) {
+        String redisKey = redisKey(caller, scope, key);
         try {
             String existing = redis.opsForValue().get(redisKey);
             if (IN_FLIGHT.equals(existing)) redis.delete(redisKey);
@@ -107,8 +110,8 @@ public class IdempotencyService {
         }
     }
 
-    private String redisKey(Long userId, String scope, String key) {
-        return PREFIX + userId + "::" + scope + "::" + key;
+    private String redisKey(ShopperIdentity caller, String scope, String key) {
+        return PREFIX + caller.principalKey() + "::" + scope + "::" + key;
     }
 
     /**

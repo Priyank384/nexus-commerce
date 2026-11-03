@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.ArgumentCaptor;
@@ -36,6 +37,7 @@ import com.example.nexusCommerce.dtos.GetOrderResponseDto;
 import com.example.nexusCommerce.dtos.GetOrderSummaryResponseDto;
 import com.example.nexusCommerce.dtos.OrderItemActionDto;
 import com.example.nexusCommerce.dtos.OrderItemRequestDto;
+import com.example.nexusCommerce.dtos.ShippingAddressRequestDto;
 import com.example.nexusCommerce.dtos.OrderItemResponseDto;
 import com.example.nexusCommerce.dtos.UpdateOrderRequestDto;
 import com.example.nexusCommerce.exceptions.ForbiddenException;
@@ -57,6 +59,7 @@ import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
 import com.example.nexusCommerce.schema.User;
+import com.example.nexusCommerce.security.ShopperIdentity;
 import com.example.nexusCommerce.utils.PageResponse;
 
 @ExtendWith(MockitoExtension.class)
@@ -93,6 +96,10 @@ class OrderServiceTest {
 
     @InjectMocks
     private OrderServiceImpl orderService;
+
+    private static final String GUEST_TOKEN = "g".repeat(43);
+    private static final ShopperIdentity MEMBER = new ShopperIdentity(1L, null);
+    private static final ShopperIdentity GUEST = new ShopperIdentity(null, GUEST_TOKEN);
 
     private Product sampleProduct() {
         Product product = Product.builder()
@@ -156,6 +163,18 @@ class OrderServiceTest {
                 .build();
         address.setUserId(userId);
         return address;
+    }
+
+    /** The checkout form a guest fills in: nothing here exists in any address book. */
+    private ShippingAddressRequestDto sampleShipping() {
+        ShippingAddressRequestDto shipping = new ShippingAddressRequestDto();
+        shipping.setRecipientName("Asha Rao");
+        shipping.setPhone("+91 98765 43210");
+        shipping.setLine1("14 Lavelle Road");
+        shipping.setCity("Bengaluru");
+        shipping.setState("Karnataka");
+        shipping.setPostalCode("560001");
+        return shipping;
     }
 
     @Test
@@ -336,7 +355,7 @@ class OrderServiceTest {
         givenSingleVariantStock(8);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
-        GetOrderResponseDto result = orderService.createOrder(dto, 1L);
+        GetOrderResponseDto result = orderService.createOrder(dto, MEMBER);
 
         assertEquals(OrderStatus.PENDING, result.getOrderStatus());
         verify(orderProductsRepository).saveAll(anyList());
@@ -360,7 +379,7 @@ class OrderServiceTest {
         givenSingleVariantStock(9);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
-        orderService.createOrder(dto, 1L);
+        orderService.createOrder(dto, MEMBER);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(captor.capture());
@@ -385,7 +404,7 @@ class OrderServiceTest {
         givenSingleVariantStock(9);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
-        orderService.createOrder(dto, 1L);
+        orderService.createOrder(dto, MEMBER);
 
         ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(captor.capture());
@@ -407,7 +426,7 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
         when(addressRepository.findById(7L)).thenReturn(Optional.of(sampleAddress(2L)));
 
-        assertThrows(ForbiddenException.class, () -> orderService.createOrder(dto, 1L));
+        assertThrows(ForbiddenException.class, () -> orderService.createOrder(dto, MEMBER));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -421,7 +440,7 @@ class OrderServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
         when(addressRepository.findById(404L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, 1L));
+        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, MEMBER));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -441,7 +460,7 @@ class OrderServiceTest {
 
         when(userRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, 99L));
+        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, new ShopperIdentity(99L, null)));
         verify(orderRepository, never()).save(any(Order.class));
     }
 
@@ -456,7 +475,7 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenReturn(order);
         when(productRepository.findAllById(List.of(99L))).thenReturn(List.of());
 
-        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, 1L));
+        assertThrows(ResourceNotFoundException.class, () -> orderService.createOrder(dto, MEMBER));
     }
 
     @Test
@@ -470,7 +489,7 @@ class OrderServiceTest {
         when(productRepository.findAllById(List.of(1L))).thenReturn(List.of(sampleProduct()));
         givenSingleVariantStock(10);
 
-        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, 1L));
+        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, MEMBER));
         verify(orderProductsRepository, never()).saveAll(anyList());
     }
 
@@ -486,7 +505,7 @@ class OrderServiceTest {
         givenSingleVariantStock(0);
         when(variantRepository.decrementStock(11L, 5)).thenReturn(0);
 
-        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, 1L));
+        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(dto, MEMBER));
         verify(orderProductsRepository, never()).saveAll(anyList());
     }
 
@@ -499,10 +518,110 @@ class OrderServiceTest {
         when(orderRepository.save(any(Order.class))).thenReturn(order);
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList())).thenReturn(response);
 
-        GetOrderResponseDto result = orderService.createOrder(CreateOrderRequestDto.builder().build(), 1L);
+        GetOrderResponseDto result = orderService.createOrder(CreateOrderRequestDto.builder().build(), MEMBER);
 
         assertEquals(OrderStatus.PENDING, result.getOrderStatus());
         verify(orderProductsRepository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void createOrder_asGuestStampsTheEmailSessionAndClaimToken() {
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
+        when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList()))
+                .thenReturn(GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build());
+
+        orderService.createOrder(CreateOrderRequestDto.builder()
+                .email(" guest@example.com ")
+                .shipping(sampleShipping())
+                .build(), GUEST);
+
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(captor.capture());
+        Order saved = captor.getValue();
+        assertNull(saved.getUser(), "a guest order attaches to no account");
+        assertEquals(GUEST_TOKEN, saved.getGuestToken());
+        assertEquals("guest@example.com", saved.getGuestEmail(), "the address is trimmed like any other input");
+        assertNotNull(saved.getClaimToken());
+        assertEquals(43, saved.getClaimToken().length(), "the claim link is a minted opaque token");
+        assertEquals("14 Lavelle Road", saved.getAddressSnapshot().getLine1());
+        assertEquals("IN", saved.getAddressSnapshot().getCountry(), "an omitted country means this store ships domestically");
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    void createOrder_asGuestWithoutAnEmail_isRejectedBeforeAnythingIsSaved() {
+        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(
+                CreateOrderRequestDto.builder().shipping(sampleShipping()).build(), GUEST));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_asGuestWithoutADestination_isRejectedBeforeAnythingIsSaved() {
+        assertThrows(InvalidRequestException.class, () -> orderService.createOrder(
+                CreateOrderRequestDto.builder().email("guest@example.com").build(), GUEST));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_asGuestCannotNameAnAddressBookRow() {
+        when(addressRepository.findById(7L)).thenReturn(Optional.of(sampleAddress(1L)));
+
+        assertThrows(ForbiddenException.class, () -> orderService.createOrder(
+                CreateOrderRequestDto.builder()
+                        .email("guest@example.com")
+                        .addressId(7L)
+                        .build(), GUEST));
+        verify(orderRepository, never()).save(any(Order.class));
+    }
+
+    @Test
+    void createOrder_theInlineDestinationWinsOverASavedAddressId() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser()));
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder());
+        when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList()))
+                .thenReturn(GetOrderResponseDto.builder().id(1L).orderStatus(OrderStatus.PENDING).build());
+
+        orderService.createOrder(CreateOrderRequestDto.builder()
+                .addressId(7L)
+                .shipping(sampleShipping())
+                .build(), MEMBER);
+
+        ArgumentCaptor<Order> captor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(captor.capture());
+        assertEquals("14 Lavelle Road", captor.getValue().getAddressSnapshot().getLine1());
+        verifyNoInteractions(addressRepository);
+    }
+
+    @Test
+    void claimOrder_attachesTheAccountAndBurnsTheLink() {
+        Order order = Order.builder().status(OrderStatus.PENDING).build();
+        order.setId(9L);
+        order.setGuestToken(GUEST_TOKEN);
+        order.setGuestEmail("guest@example.com");
+        order.setClaimToken("kQ7mZ2xT9vB4cL6pR8sY1uW3eA5nJ0hD7gF2kM9qXbE");
+        User account = sampleUser();
+        when(orderRepository.findByClaimToken(order.getClaimToken())).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(order));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(account));
+        when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of());
+        when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList()))
+                .thenReturn(GetOrderResponseDto.builder().id(9L).orderStatus(OrderStatus.PENDING).build());
+
+        GetOrderResponseDto result =
+                orderService.claimOrder(order.getClaimToken(), 1L);
+
+        assertEquals(9L, result.getId());
+        assertEquals(account, order.getUser());
+        assertNull(order.getGuestToken(), "the browser session loses its hold on a claimed order");
+        assertNull(order.getClaimToken(), "the mailed link works once");
+    }
+
+    @Test
+    void claimOrder_withAnUnknownOrAlreadyUsedToken_isNotFound() {
+        when(orderRepository.findByClaimToken("nope")).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> orderService.claimOrder("nope", 1L));
+        verify(orderRepository, never()).save(any(Order.class));
     }
 
     @Test

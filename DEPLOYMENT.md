@@ -148,6 +148,34 @@ something to leave configured:
 3. **Blank all three variables and redeploy.** The runner is inert unless both email and
    password are non-empty, so a blank pair can never resurrect the account.
 
+### Transactional email
+
+Order confirmations and password-reset links are the only two things this backend mails, and
+both are **silently logged instead of sent** until a relay is configured — a live storefront
+can take paid orders and deliver nothing to anyone's inbox without any error surfacing.
+
+1. Pick an SMTP-capable provider (Resend, Postmark, SES, Mailgun all speak SMTP) and verify
+   the sending **domain**, not just the address. `MAIL_FROM` must be on that domain or the
+   relay accepts the message and spam filters do not.
+2. In Render, set `MAIL_ENABLED=true`, `MAIL_HOST`, `MAIL_PORT` (`587`), `MAIL_USERNAME`,
+   `MAIL_PASSWORD`, `MAIL_FROM` and `STOREFRONT_BASE_URL`.
+3. `STOREFRONT_BASE_URL` must be the **deployed storefront origin**. Every link in every email
+   is built from it; leave it at the `http://localhost:3000` default and receipts and reset
+   links point at the recipient's own machine.
+4. Deploy and read the startup log. `NotificationConfig` states which sender it chose —
+   `Transactional email enabled from … to …`, or a warning that `app.mail.enabled=true` but no
+   host was found. That line is the only proof the wiring took.
+5. Request a reset for an address you control (`POST /api/v1/auth/forgot-password`) and confirm
+   the mail arrives and the link completes.
+
+**Why a dead relay does not fail a request:** sending is best-effort. The callers are an
+after-commit event listener and the payment-capture path, both of which have already durably
+recorded the money, so a transport error is logged and swallowed. Turning that into an
+exception would make Razorpay retry a webhook whose settle guard now answers "already
+settled" — and the receipt would never send at all. For the same reason the Actuator **mail**
+health contributor stays disabled; a probe that flips the app to `DOWN` for a condition the
+code deliberately tolerates would page on noise.
+
 ## 4. Vercel (frontend)
 
 1. Import `nexus-commerce-frontend`, framework preset **Next.js**, branch `main`.
@@ -158,6 +186,11 @@ something to leave configured:
    | `API_BASE_URL` | `https://nexus-commerce-api.onrender.com` |
    | `NEXT_IMAGE_HOSTS` | `<project-ref>.supabase.co` (the Storage public hostname, no scheme) |
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` — canonical origin for canonicals, Open Graph, `sitemap.ts`, `robots.ts` and JSON-LD |
+   | `NEXT_PUBLIC_SUPPORT_EMAIL` | An address someone actually answers. `/contact` publishes it only when set; unset, the page says so plainly instead of printing an inbox nobody reads |
+
+   `STOREFRONT_BASE_URL` on the Render side and `NEXT_PUBLIC_SITE_URL` here must be the **same
+   origin** — the backend builds every emailed link from the former, so a mismatch sends
+   shoppers to a URL that is not the live store.
 
 3. Deploy. `next/image` remote patterns are baked at build time, so changing
    `NEXT_IMAGE_HOSTS` requires a redeploy. `NEXT_PUBLIC_SITE_URL` falls back to Vercel's
@@ -203,6 +236,19 @@ Run after every deploy, against the deployed URLs:
 7. Restart the Render service and confirm the catalogue, orders and sessions survive (the
    DB, Redis and Storage are external; only the local disk would be lost, and nothing
    lives there).
+8. **Guest path** — sign out, add a variant to the bag, check out with an email you control
+   and the test card. The bag must survive the reload, the receipt must arrive, and the
+   claim link in it must attach the order to a fresh account. Then reload `/cart`: a guest
+   bag belongs to the browser, so it must be empty once that session has been merged.
+9. **Mail round trip** — `POST /api/v1/auth/forgot-password` for a real address, click the
+   link, sign in with the new password. A second use of the same link must answer 400. If
+   nothing arrives, read the startup log for which notification sender was chosen before
+   debugging the relay.
+10. **Trust pages** — `/returns`, `/shipping`, `/size-guide` and `/contact` answer 200 signed
+    out, and `/contact` shows the support address you set (or the "no published inbox" note,
+    if you did not). These pages state merchant promises taken from
+    `src/lib/content/policy.ts` on the frontend; confirm the numbers are ones the business
+    intends to keep.
 
 ## 7. Operations
 

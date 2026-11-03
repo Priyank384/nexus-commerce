@@ -17,6 +17,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.example.nexusCommerce.adapters.UserAdapter;
 import com.example.nexusCommerce.dtos.CreateUserRequestDto;
 import com.example.nexusCommerce.dtos.GetUserResponseDto;
+import com.example.nexusCommerce.dtos.UpdateProfileRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.UserRepository;
@@ -122,5 +123,59 @@ class UserServiceTest {
         when(userRepository.findById(7L)).thenReturn(java.util.Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> userService.getProfile(7L));
+    }
+
+    @Test
+    void updateProfile_renamesTheAccountAndKeepsTheLoginIdentity() {
+        User user = User.builder().name("Asha Rao").email("asha@example.com").phone("9876543210").build();
+        user.setId(7L);
+        givenSaveEchoesBack();
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.of(user));
+
+        GetUserResponseDto result = userService.updateProfile(7L, UpdateProfileRequestDto.builder()
+                .name("  Asha Sharma  ")
+                .phone(" 98765 43210 ")
+                .build());
+
+        assertEquals("Asha Sharma", result.getName());
+        assertEquals("98765 43210", result.getPhone());
+        assertEquals("asha@example.com", result.getEmail());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateProfile_withABlankPhoneClearsItRatherThanStoringEmptyString() {
+        User user = User.builder().name("Asha Rao").email("asha@example.com").phone("9876543210").build();
+        user.setId(7L);
+        givenSaveEchoesBack();
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.of(user));
+
+        GetUserResponseDto result = userService.updateProfile(7L, UpdateProfileRequestDto.builder()
+                .name("Asha Rao")
+                .phone("   ")
+                .build());
+
+        assertEquals(null, result.getPhone());
+    }
+
+    @Test
+    void updateProfile_whenUserGone_throwsResourceNotFoundException() {
+        when(userRepository.findById(7L)).thenReturn(java.util.Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> userService.updateProfile(
+                7L, UpdateProfileRequestDto.builder().name("Anyone").build()));
+
+        verify(userRepository, never()).save(any());
+    }
+
+    /** Maps whatever was persisted, so the assertions read the fields the service actually set. */
+    private void givenSaveEchoesBack() {
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(userAdapter.mapToGetUserResponseDto(any())).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            return GetUserResponseDto.builder()
+                    .id(user.getId()).name(user.getName()).email(user.getEmail()).phone(user.getPhone())
+                    .build();
+        });
     }
 }

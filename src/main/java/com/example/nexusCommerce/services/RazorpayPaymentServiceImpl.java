@@ -6,6 +6,8 @@ import static com.example.nexusCommerce.configs.CacheConfig.ORDER_SUMMARY;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.StringJoiner;
 
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
@@ -23,7 +25,9 @@ import com.example.nexusCommerce.exceptions.ResourceNotFoundException;
 import com.example.nexusCommerce.repositories.OrderProductsRepository;
 import com.example.nexusCommerce.repositories.OrderRepository;
 import com.example.nexusCommerce.schema.Order;
+import com.example.nexusCommerce.schema.OrderProducts;
 import com.example.nexusCommerce.schema.PaymentStatus;
+import com.example.nexusCommerce.security.ShopperIdentity;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,8 +65,8 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
             @CacheEvict(cacheNames = { ORDER_BY_ID, ORDER_SUMMARY }, key = "#orderId")
     })
     @Override
-    public CreatePaymentResponseDto createPayment(Long userId, Long orderId) {
-        Order order = requireOwned(userId, orderId);
+    public CreatePaymentResponseDto createPayment(ShopperIdentity shopper, Long orderId) {
+        Order order = requireOwned(shopper, orderId);
         if (order.getPaymentStatus() == PaymentStatus.PAID) {
             throw new InvalidRequestException("Order " + orderId + " has already been paid");
         }
@@ -106,8 +110,9 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
             @CacheEvict(cacheNames = { ORDER_BY_ID, ORDER_SUMMARY }, key = "#orderId")
     })
     @Override
-    public GetPaymentStatusResponseDto verifyPayment(Long userId, Long orderId, VerifyPaymentRequestDto requestDto) {
-        Order order = requireOwned(userId, orderId);
+    public GetPaymentStatusResponseDto verifyPayment(ShopperIdentity shopper, Long orderId,
+            VerifyPaymentRequestDto requestDto) {
+        Order order = requireOwned(shopper, orderId);
         if (order.getPaymentStatus() == PaymentStatus.PAID) {
             // Replay-safe: the storefront retries this after a page refresh, and a second
             // success must not send a second confirmation.
@@ -128,8 +133,8 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
 
     @Transactional(readOnly = true)
     @Override
-    public GetPaymentStatusResponseDto paymentStatus(Long userId, Long orderId) {
-        return statusOf(requireOwned(userId, orderId));
+    public GetPaymentStatusResponseDto paymentStatus(ShopperIdentity shopper, Long orderId) {
+        return statusOf(requireOwned(shopper, orderId));
     }
 
     /**
@@ -185,7 +190,7 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         Order paid = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order with id: " + orderId + " Not Found!"));
         if (settled == 1) {
-            notifications.sendOrderConfirmation(paid.getUser().getId(), paid.getId(), paid.getUser().getEmail());
+            notifications.sendOrderConfirmation(receiptFor(paid));
             log.info("Order {} settled by {} (payment {})", orderId, PROVIDER, razorpayPaymentId);
         } else {
             log.info("Order {} was settled by a concurrent request; confirmation already sent", orderId);
@@ -193,11 +198,45 @@ public class RazorpayPaymentServiceImpl implements PaymentService {
         return paid;
     }
 
-    private Order requireOwned(Long userId, Long orderId) {
+    /**
+     * Reads the line items' own snapshots instead of the live product rows, so the receipt is
+     * still accurate for a catalogue that changed after checkout.
+     */
+    private NotificationService.OrderReceipt receiptFor(Order order) {
+        List<NotificationService.OrderReceipt.Line> lines = orderProductsRepository.findByOrderWithProduct(order)
+                .stream()
+                .map(item -> new NotificationService.OrderReceipt.Line(
+                        item.getProductName(), item.getQuantity(), variantLabel(item)))
+                .toList();
+        return new NotificationService.OrderReceipt(order.recipientEmail(), order.getId(),
+                orderProductsRepository.totalByOrderId(order.getId()), order.getCreatedAt(), lines,
+                order.getClaimToken());
+    }
+
+    private static String variantLabel(OrderProducts item) {
+        StringJoiner label = new StringJoiner(" / ");
+        if (item.getVariantSize() != null && !item.getVariantSize().isBlank()) {
+            label.add(item.getVariantSize());
+        }
+        if (item.getVariantColorName() != null && !item.getVariantColorName().isBlank()) {
+            label.add(item.getVariantColorName());
+        }
+        return label.length() == 0 ? null : label.toString();
+    }
+
+    /**
+     * Ownership of an order, by whichever credential the caller has. A guest proves it with the
+     * session token that placed it, so the checkout flow needs no account anywhere; a claimed
+     * order has already given that token up and is reachable only by its new owner.
+     */
+    private Order requireOwned(ShopperIdentity shopper, Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Order with id: " + orderId + " Not Found!"));
-        if (!order.getUser().getId().equals(userId)) {
-            throw new ForbiddenException("Order " + orderId + " does not belong to user " + userId);
+        boolean owned = shopper.isGuest()
+                ? order.ownedByGuestToken(shopper.guestToken())
+                : order.ownedByUser(shopper.userId());
+        if (!owned) {
+            throw new ForbiddenException("Order " + orderId + " does not belong to this shopper");
         }
         return order;
     }

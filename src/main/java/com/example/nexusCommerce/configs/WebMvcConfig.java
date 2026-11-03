@@ -28,8 +28,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
         if (interceptor != null) {
             // Refresh is not listed: every page load refreshes the session, and behind the
             // BFF that traffic shares one IP, so limiting it would lock shoppers out.
+            // Forgot-password is listed because it is the one endpoint that spends mail
+            // reputation on an unauthenticated call.
             registry.addInterceptor(interceptor)
-                    .addPathPatterns("/api/v1/auth/login", "/api/v1/users");
+                    .addPathPatterns("/api/v1/auth/login", "/api/v1/auth/forgot-password", "/api/v1/users");
         }
     }
 

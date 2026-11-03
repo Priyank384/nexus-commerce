@@ -27,16 +27,20 @@ public class OrderAdapter {
     }
 
     public GetOrderResponseDto mapToGetOrderResponseDto(Order order, List<OrderProducts> orderProducts) {
+        AddressSnapshot shipping = order.getAddressSnapshot();
         return GetOrderResponseDto.builder()
                 .id(order.getId())
-                .userId(order.getUser().getId())
-                .customerName(order.getUser().getName())
-                .customerEmail(order.getUser().getEmail())
+                .userId(order.getUser() != null ? order.getUser().getId() : null)
+                // A guest order names nobody in users, so the person it was delivered to is the
+                // closest true thing the admin queue can show.
+                .customerName(order.getUser() != null ? order.getUser().getName()
+                        : shipping != null ? shipping.getRecipientName() : null)
+                .customerEmail(order.recipientEmail())
                 .orderStatus(order.getStatus())
                 .totalPrice(totalOf(orderProducts))
                 .paymentStatus(order.getPaymentStatus())
                 .paidAt(order.getPaidAt())
-                .address(addressOf(order.getAddressSnapshot()))
+                .address(addressOf(shipping))
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .items(mapToOrderItemResponseDto(orderProducts))

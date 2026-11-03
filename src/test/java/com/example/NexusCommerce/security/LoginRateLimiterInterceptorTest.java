@@ -104,6 +104,26 @@ class LoginRateLimiterInterceptorTest {
     }
 
     @Test
+    void aCounterThatLostItsWindowIsReArmed() throws Exception {
+        // A key with a tally but no expiry would block this caller for good, so the very next
+        // counted request has to put the window back.
+        when(values.increment(KEY)).thenReturn(11L);
+        when(redis.getExpire(KEY)).thenReturn(-1L);
+
+        assertFalse(interceptor.preHandle(request("/api/v1/users", "POST"), response(200), new Object()));
+        verify(redis).expire(eq(KEY), any());
+    }
+
+    @Test
+    void aCounterInsideItsWindowKeepsThatWindow() throws Exception {
+        when(values.increment(KEY)).thenReturn(4L);
+        when(redis.getExpire(KEY)).thenReturn(41L);
+
+        assertTrue(interceptor.preHandle(request("/api/v1/users", "POST"), response(200), new Object()));
+        verify(redis, never()).expire(anyString(), any());
+    }
+
+    @Test
     void aReadOfTheUserListIsNotARegistration() throws Exception {
         assertTrue(interceptor.preHandle(request("/api/v1/users", "GET"), response(200), new Object()));
         verifyNoInteractions(values);

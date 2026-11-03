@@ -16,6 +16,7 @@ import com.example.nexusCommerce.dtos.CreatePaymentResponseDto;
 import com.example.nexusCommerce.dtos.GetPaymentStatusResponseDto;
 import com.example.nexusCommerce.dtos.VerifyPaymentRequestDto;
 import com.example.nexusCommerce.security.AuthenticatedUser;
+import com.example.nexusCommerce.security.ShopperIdentity;
 import com.example.nexusCommerce.services.PaymentService;
 import com.example.nexusCommerce.utils.ApiResponse;
 
@@ -24,7 +25,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
-@Tag(name = "Payments", description = "Razorpay checkout for an existing order")
+@Tag(name = "Payments", description = "Razorpay checkout for an existing order, by an account or a guest session")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/payments")
@@ -33,15 +34,19 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @Operation(summary = "Start payment for an order",
-               description = "Creates the Razorpay order for the caller's order total and returns the "
+               description = "Creates the Razorpay order for the order total and returns the "
                              + "checkout ticket (key id, Razorpay order id and amount in paise). "
-                             + "Repeat calls re-price the order and replace any earlier ticket.")
+                             + "Repeat calls re-price the order and replace any earlier ticket. "
+                             + "A guest proves ownership of the order with the same " + ShopperIdentity.HEADER
+                             + " header that placed it.")
     @PostMapping("/razorpay/orders/{orderId}")
     public ResponseEntity<ApiResponse<CreatePaymentResponseDto>> createPayment(
             @PathVariable Long orderId,
+            @RequestHeader(name = ShopperIdentity.HEADER, required = false) String guestToken,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(ApiResponse.success(
-                paymentService.createPayment(caller.id(), orderId), "Payment initiated"));
+                paymentService.createPayment(ShopperIdentity.require(caller, guestToken), orderId),
+                "Payment initiated"));
     }
 
     @Operation(summary = "Confirm a completed checkout",
@@ -51,20 +56,24 @@ public class PaymentController {
     public ResponseEntity<ApiResponse<GetPaymentStatusResponseDto>> verifyPayment(
             @PathVariable Long orderId,
             @Valid @RequestBody VerifyPaymentRequestDto requestDto,
+            @RequestHeader(name = ShopperIdentity.HEADER, required = false) String guestToken,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(ApiResponse.success(
-                paymentService.verifyPayment(caller.id(), orderId, requestDto), "Payment verified"));
+                paymentService.verifyPayment(ShopperIdentity.require(caller, guestToken), orderId, requestDto),
+                "Payment verified"));
     }
 
     @Operation(summary = "Get payment status of an order",
-               description = "Owner-only. The storefront polls this after the checkout sheet closes, "
+               description = "Order-owner only. The storefront polls this after the checkout sheet closes, "
                              + "because the gateway webhook may settle the order first.")
     @GetMapping("/orders/{orderId}/status")
     public ResponseEntity<ApiResponse<GetPaymentStatusResponseDto>> paymentStatus(
             @PathVariable Long orderId,
+            @RequestHeader(name = ShopperIdentity.HEADER, required = false) String guestToken,
             @AuthenticationPrincipal AuthenticatedUser caller) {
         return ResponseEntity.ok(ApiResponse.success(
-                paymentService.paymentStatus(caller.id(), orderId), "Payment status fetched"));
+                paymentService.paymentStatus(ShopperIdentity.require(caller, guestToken), orderId),
+                "Payment status fetched"));
     }
 
     /**

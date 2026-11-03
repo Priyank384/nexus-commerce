@@ -45,6 +45,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
      */
     Optional<Order> findByPaymentIntentId(String paymentIntentId);
 
+    /**
+     * Resolves the link mailed with a guest's receipt back to its order. Unique per order, and
+     * soft-deleted rows are filtered out by {@code @SQLRestriction}, so a deleted order's link
+     * stops working instead of surfacing a row nobody owns.
+     */
+    Optional<Order> findByClaimToken(String claimToken);
+
     long countByStatus(OrderStatus status);
 
     // Live orders only (@SQLRestriction is applied); grouped for the admin dashboard.

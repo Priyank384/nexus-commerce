@@ -56,7 +56,11 @@ public class LoginAttemptService {
         try {
             String key = key(email);
             Long count = redis.opsForValue().increment(key);
-            if (count != null && count == 1L) {
+            // A counter that outlives its window would lock this address out of signing in
+            // permanently, so re-arm the expiry any time the key has none rather than only on
+            // the first failure.
+            Long remaining = count == null || count != 1L ? redis.getExpire(key) : null;
+            if (count != null && (count == 1L || remaining == null || remaining < 0)) {
                 redis.expire(key, Duration.ofSeconds(windowSeconds));
             }
         } catch (DataAccessException e) {

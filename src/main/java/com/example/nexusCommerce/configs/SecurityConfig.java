@@ -64,6 +64,13 @@ public class SecurityConfig {
                 // Razorpay's server-to-server callback carries no bearer token; it proves
                 // itself with an HMAC over the raw body, so auth here is the signature check.
                 .requestMatchers(HttpMethod.POST, "/api/v1/payments/razorpay/webhook").permitAll()
+                // Guest checkout. A cart and a payment ticket are reachable by whoever holds the
+                // session credential that created them, so the filter chain cannot decide this
+                // one; the services compare the caller against the owning cart or order instead.
+                // Every request here with neither a token nor a session header is refused there.
+                .requestMatchers("/api/v1/cart", "/api/v1/cart/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/payments/orders/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/payments/razorpay/orders/**").permitAll()
                 // catalogue writes are admin-only
                 .requestMatchers(HttpMethod.POST, "/api/v1/products", "/api/v1/products/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/v1/products", "/api/v1/products/**").hasRole("ADMIN")

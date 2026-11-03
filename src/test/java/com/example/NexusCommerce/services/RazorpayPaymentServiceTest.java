@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -39,9 +40,14 @@ import com.example.nexusCommerce.schema.Order;
 import com.example.nexusCommerce.schema.OrderStatus;
 import com.example.nexusCommerce.schema.PaymentStatus;
 import com.example.nexusCommerce.schema.User;
+import com.example.nexusCommerce.security.ShopperIdentity;
 
 @ExtendWith(MockitoExtension.class)
 class RazorpayPaymentServiceTest {
+
+    private static final String GUEST_TOKEN = "g".repeat(43);
+    private static final ShopperIdentity MEMBER = new ShopperIdentity(1L, null);
+    private static final ShopperIdentity GUEST = new ShopperIdentity(null, GUEST_TOKEN);
 
     private static final byte[] WEBHOOK_BODY =
             "{\"event\":\"payment.captured\"}".getBytes(StandardCharsets.UTF_8);
@@ -82,6 +88,18 @@ class RazorpayPaymentServiceTest {
         User owner = User.builder().name("Shopper").email("shopper@example.com").build();
         owner.setId(ownerId);
         order.setUser(owner);
+        return order;
+    }
+
+    /** The order a browser session placed: no account anywhere in it. */
+    private Order guestOrder(String sessionToken, String claimToken) {
+        Order order = Order.builder()
+                .status(OrderStatus.PENDING)
+                .guestToken(sessionToken)
+                .guestEmail("guest@example.com")
+                .claimToken(claimToken)
+                .build();
+        order.setId(7L);
         return order;
     }
 
@@ -134,7 +152,7 @@ class RazorpayPaymentServiceTest {
         when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
                 PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
-        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+        CreatePaymentResponseDto result = paymentService.createPayment(MEMBER, 7L);
 
         assertEquals("order_RZP1", result.getRazorpayOrderId());
         assertEquals(129900L, result.getAmount());
@@ -155,7 +173,7 @@ class RazorpayPaymentServiceTest {
         when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
                 PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(0);
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(MEMBER, 7L));
     }
 
     @Test
@@ -163,7 +181,7 @@ class RazorpayPaymentServiceTest {
         Order order = unpaidOrder(1L, "order_RZP1", PaymentStatus.PAID);
         givenOrder(order);
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(MEMBER, 7L));
         verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
     }
 
@@ -172,7 +190,7 @@ class RazorpayPaymentServiceTest {
         Order order = unpaidOrder(99L, null, null);
         givenOrder(order);
 
-        assertThrows(ForbiddenException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(ForbiddenException.class, () -> paymentService.createPayment(MEMBER, 7L));
         verify(orderRepository, never()).save(any());
     }
 
@@ -180,7 +198,7 @@ class RazorpayPaymentServiceTest {
     void createPayment_whenOrderMissing_throwsNotFound() {
         when(orderRepository.findById(7L)).thenReturn(Optional.empty());
 
-        assertThrows(ResourceNotFoundException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(ResourceNotFoundException.class, () -> paymentService.createPayment(MEMBER, 7L));
     }
 
     @Test
@@ -190,7 +208,7 @@ class RazorpayPaymentServiceTest {
         givenOrder(order);
         givenTotal("0.00");
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(MEMBER, 7L));
         verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
     }
 
@@ -205,14 +223,17 @@ class RazorpayPaymentServiceTest {
         givenSettleWins(order);
 
         GetPaymentStatusResponseDto result = paymentService.verifyPayment(
-                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
+                MEMBER, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
 
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
         assertEquals("pay_ABC", order.getPaymentRef());
         assertNotNull(order.getPaidAt());
         assertEquals(PaymentStatus.PAID, result.getPaymentStatus());
         assertEquals(new BigDecimal("1299.00"), result.getTotalPrice());
-        verify(notifications).sendOrderConfirmation(1L, 7L, "shopper@example.com");
+        verify(notifications).sendOrderConfirmation(argThat(receipt ->
+                "shopper@example.com".equals(receipt.toEmail())
+                        && receipt.orderId().equals(7L)
+                        && new BigDecimal("1299.00").compareTo(receipt.total()) == 0));
     }
 
     @Test
@@ -222,12 +243,12 @@ class RazorpayPaymentServiceTest {
         when(razorpay.paymentSignatureMatches("order_RZP1|pay_ABC", "bogus")).thenReturn(false);
 
         assertThrows(InvalidRequestException.class, () -> paymentService.verifyPayment(
-                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "bogus")));
+                MEMBER, 7L, new VerifyPaymentRequestDto("pay_ABC", "bogus")));
 
         assertEquals(PaymentStatus.CREATED, order.getPaymentStatus());
         assertNull(order.getPaymentRef());
         verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
-        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+        verify(notifications, never()).sendOrderConfirmation(any());
     }
 
     @Test
@@ -236,7 +257,7 @@ class RazorpayPaymentServiceTest {
         givenOrder(order);
 
         assertThrows(InvalidRequestException.class, () -> paymentService.verifyPayment(
-                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef")));
+                MEMBER, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef")));
     }
 
     @Test
@@ -248,12 +269,12 @@ class RazorpayPaymentServiceTest {
         when(razorpay.currency()).thenReturn("INR");
 
         GetPaymentStatusResponseDto result = paymentService.verifyPayment(
-                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
+                MEMBER, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
 
         assertEquals(PaymentStatus.PAID, result.getPaymentStatus());
         assertEquals("pay_ABC", result.getRazorpayPaymentId());
         verify(orderRepository, never()).save(any());
-        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+        verify(notifications, never()).sendOrderConfirmation(any());
     }
 
     @Test
@@ -270,7 +291,8 @@ class RazorpayPaymentServiceTest {
 
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
         assertEquals("pay_ABC", order.getPaymentRef());
-        verify(notifications).sendOrderConfirmation(1L, 7L, "shopper@example.com");
+        verify(notifications).sendOrderConfirmation(argThat(receipt ->
+                "shopper@example.com".equals(receipt.toEmail()) && receipt.orderId().equals(7L)));
     }
 
     @Test
@@ -307,7 +329,7 @@ class RazorpayPaymentServiceTest {
         // cannot be blanked by a later failure for a different instrument.
         verify(orderRepository).markFailedIfNotPaid(7L, PaymentStatus.FAILED, PaymentStatus.PAID);
         verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
-        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+        verify(notifications, never()).sendOrderConfirmation(any());
     }
 
     @Test
@@ -321,7 +343,7 @@ class RazorpayPaymentServiceTest {
         paymentService.handleWebhook(WEBHOOK_BODY, "sig");
 
         verify(orderRepository, never()).settleIfUnpaid(any(), any(), any(), any(), any(), any());
-        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+        verify(notifications, never()).sendOrderConfirmation(any());
     }
 
     @Test
@@ -343,7 +365,7 @@ class RazorpayPaymentServiceTest {
         givenTotal("1299.00");
         when(razorpay.currency()).thenReturn("INR");
 
-        GetPaymentStatusResponseDto result = paymentService.paymentStatus(1L, 7L);
+        GetPaymentStatusResponseDto result = paymentService.paymentStatus(MEMBER, 7L);
 
         assertEquals(7L, result.getOrderId());
         assertEquals("order_RZP1", result.getRazorpayOrderId());
@@ -356,7 +378,7 @@ class RazorpayPaymentServiceTest {
     void paymentStatus_forAnotherUsersOrder_isRejected() {
         givenOrder(unpaidOrder(99L, "order_RZP1", PaymentStatus.PAID));
 
-        assertThrows(ForbiddenException.class, () -> paymentService.paymentStatus(1L, 7L));
+        assertThrows(ForbiddenException.class, () -> paymentService.paymentStatus(MEMBER, 7L));
     }
 
     @Test
@@ -367,7 +389,7 @@ class RazorpayPaymentServiceTest {
         // order, and sending it would fail at the gateway for a reason the shopper cannot act on.
         givenTotal("0.99");
 
-        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(1L, 7L));
+        assertThrows(InvalidRequestException.class, () -> paymentService.createPayment(MEMBER, 7L));
 
         givenTotal("1.00");
         when(razorpay.createOrder(100L, "order-7", "7")).thenReturn("order_RZP2");
@@ -376,7 +398,7 @@ class RazorpayPaymentServiceTest {
         when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP2", 100L,
                 PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
-        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+        CreatePaymentResponseDto result = paymentService.createPayment(MEMBER, 7L);
 
         assertEquals(100L, result.getAmount());
         assertEquals(new BigDecimal("1.00"), result.getTotalPrice());
@@ -394,7 +416,7 @@ class RazorpayPaymentServiceTest {
         when(razorpay.keyId()).thenReturn("rzp_test_123");
         when(razorpay.currency()).thenReturn("INR");
 
-        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+        CreatePaymentResponseDto result = paymentService.createPayment(MEMBER, 7L);
 
         assertEquals("order_RZP1", result.getRazorpayOrderId());
         verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
@@ -413,7 +435,7 @@ class RazorpayPaymentServiceTest {
         when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP9", 149900L,
                 PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
 
-        CreatePaymentResponseDto result = paymentService.createPayment(1L, 7L);
+        CreatePaymentResponseDto result = paymentService.createPayment(MEMBER, 7L);
 
         assertEquals("order_RZP9", result.getRazorpayOrderId());
         assertEquals(149900L, result.getAmount());
@@ -429,10 +451,10 @@ class RazorpayPaymentServiceTest {
         givenSettleLoses(order);
 
         GetPaymentStatusResponseDto result = paymentService.verifyPayment(
-                1L, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
+                MEMBER, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
 
         assertEquals(PaymentStatus.PAID, result.getPaymentStatus());
-        verify(notifications, never()).sendOrderConfirmation(any(), any(), any());
+        verify(notifications, never()).sendOrderConfirmation(any());
     }
 
     @Test
@@ -449,5 +471,69 @@ class RazorpayPaymentServiceTest {
         // arrive together, and the one that reads PAID must not become the one that reopens it.
         verify(orderRepository).markFailedIfNotPaid(7L, PaymentStatus.FAILED, PaymentStatus.PAID);
         assertEquals(PaymentStatus.PAID, order.getPaymentStatus());
+    }
+
+    @Test
+    void createPayment_asTheSessionThatPlacedTheGuestOrder_neverTouchesAnAccount() {
+        givenOrder(guestOrder(GUEST_TOKEN, null));
+        givenTotal("1299.00");
+        when(razorpay.createOrder(129900L, "order-7", "7")).thenReturn("order_RZP1");
+        when(razorpay.keyId()).thenReturn("rzp_test_123");
+        when(razorpay.currency()).thenReturn("INR");
+        when(orderRepository.recordIntentIfUnpaid(7L, "razorpay", "order_RZP1", 129900L,
+                PaymentStatus.CREATED, PaymentStatus.PAID)).thenReturn(1);
+
+        CreatePaymentResponseDto result = paymentService.createPayment(GUEST, 7L);
+
+        assertEquals("order_RZP1", result.getRazorpayOrderId());
+        assertEquals(new BigDecimal("1299.00"), result.getTotalPrice());
+    }
+
+    @Test
+    void createPayment_aDifferentGuestSessionIsRejected() {
+        givenOrder(guestOrder(GUEST_TOKEN, null));
+
+        assertThrows(ForbiddenException.class,
+                () -> paymentService.createPayment(new ShopperIdentity(null, "x".repeat(43)), 7L));
+        verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void createPayment_aSignedInStrangerCannotPayForAGuestOrder() {
+        givenOrder(guestOrder(GUEST_TOKEN, null));
+
+        assertThrows(ForbiddenException.class,
+                () -> paymentService.createPayment(new ShopperIdentity(2L, null), 7L));
+        verify(razorpay, never()).createOrder(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void verifyPayment_asGuest_mailsWithTheAddressedToTheGuestAndCarriesTheClaimLink() {
+        Order order = guestOrder(GUEST_TOKEN, "kQ7mZ2xT9vB4cL6pR8sY1uW3eA5nJ0hD7gF2kM9qXbE");
+        order.setPaymentIntentId("order_RZP1");
+        order.setPaymentStatus(PaymentStatus.CREATED);
+        givenOrder(order);
+        givenTotal("1299.00");
+        when(razorpay.paymentSignatureMatches("order_RZP1|pay_ABC", "deadbeef")).thenReturn(true);
+        when(razorpay.currency()).thenReturn("INR");
+        givenSettleWins(order);
+
+        paymentService.verifyPayment(GUEST, 7L, new VerifyPaymentRequestDto("pay_ABC", "deadbeef"));
+
+        verify(notifications).sendOrderConfirmation(argThat(receipt ->
+                "guest@example.com".equals(receipt.toEmail())
+                        && order.getClaimToken().equals(receipt.claimToken())));
+    }
+
+    @Test
+    void paymentStatus_afterTheOrderIsClaimed_theOldSessionLosesAccess() {
+        Order order = guestOrder(GUEST_TOKEN, null);
+        User account = User.builder().name("Shopper").email("shopper@example.com").build();
+        account.setId(1L);
+        order.setUser(account);
+        order.setGuestToken(null);
+        givenOrder(order);
+
+        assertThrows(ForbiddenException.class, () -> paymentService.paymentStatus(GUEST, 7L));
     }
 }

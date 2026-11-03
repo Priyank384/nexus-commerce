@@ -15,7 +15,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 7. [Authentication & authorization](#7-authentication--authorization)
 8. [Domain model](#8-domain-model)
 9. [Data integrity & migrations](#9-data-integrity--migrations)
-10. [Redis state (cache, refresh tokens, blacklist, idempotency, rate limit)](#10-redis-state)
+10. [Redis state (cache, cache epochs, refresh tokens, blacklist, idempotency, rate limit)](#10-redis-state)
 11. [Observability](#11-observability)
 12. [API reference and payloads](#12-api-reference-and-payloads)
 13. [Real-life scenarios](#13-real-life-scenarios)
@@ -41,7 +41,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 
 Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed sign-ins and registration attempts share one IP-keyed Redis fixed-window counter (§17.2).
 
-All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V28`) and Hibernate runs in `validate` mode only.
+All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V29`) and Hibernate runs in `validate` mode only.
 
 Observability ships in two layers: **Spring Boot Actuator + Micrometer + Prometheus** for self-hosted metrics (admin-gated), and the **New Relic Java APM agent** attached on `bootRun` when its jar is present. The HTTP server shuts down gracefully on SIGTERM.
 
@@ -63,7 +63,7 @@ Deployment is a multi-stage **Dockerfile** (Temurin 21 build → non-root runtim
 | **Spring Data JPA** | Repositories, ORM | (via starter) |
 | **Hibernate** | JPA provider, `ddl-auto: validate` | 7.x |
 | **MySQL** | Primary database | 8.4 / 9.6 validated |
-| **Flyway** | Versioned SQL migrations (`V1`–`V28`, mirrored for PostgreSQL) | (via starter) |
+| **Flyway** | Versioned SQL migrations (`V1`–`V29`, mirrored for PostgreSQL) | (via starter) |
 | **Redis + Lettuce** | Spring Cache backend, refresh tokens, JWT blacklist, login rate limit, idempotency replay | Spring Data Redis |
 | **Lombok** | Boilerplate reduction | compileOnly |
 | **springdoc-openapi** | Swagger UI / OpenAPI 3 (+ bearer scheme) | 2.8.5 |
@@ -112,7 +112,7 @@ CREATE DATABASE nexuscommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 3. Ensure a user can connect to `localhost:3306` with rights on `nexuscommerce`.
 
-**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V28` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
+**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V29` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
 
 ### 3.3 Redis setup
 
@@ -133,7 +133,7 @@ redis-cli ping
 # PONG
 ```
 
-Redis is used for five distinct things (see §10): GET cache, refresh-token store, JWT blacklist, login rate-limit counter, and idempotency replay. The GET cache degrades gracefully on Redis failures (a `CacheErrorHandler` falls through to MySQL, and the 500 ms Lettuce connect/read timeouts bound any hang), **but** refresh tokens, blacklist, and idempotency are correctness-critical — a Redis outage effectively disables logout, refresh, idempotent retries, and login rate limiting until it returns.
+Redis is used for six distinct things (see §10): GET cache, cache invalidation epochs, refresh-token store, JWT blacklist, login rate-limit counter, and idempotency replay. The GET cache degrades gracefully on Redis failures (a `CacheErrorHandler` falls through to MySQL, and the 500 ms Lettuce connect/read timeouts bound any hang), **but** refresh tokens, blacklist, and idempotency are correctness-critical — a Redis outage effectively disables logout, refresh, idempotent retries, and login rate limiting until it returns. Epoch counters are the exception by design: an unreadable one is treated as unknown and the cached write still happens, so a Redis blip degrades the race guard to its pre-guard behaviour instead of breaking reads.
 
 ### 3.4 Project configuration file (`.env`)
 
@@ -385,13 +385,38 @@ NexusCommerce uses a **two-token model**:
 
 | Access level | Routes |
 |--------------|--------|
-| **Public (no token)** | `/api/v1/auth/**` (login, refresh, logout), `POST /api/v1/users`, Swagger/OpenAPI paths, `GET /uploads/**`, `GET /actuator/health`, `GET /actuator/health/liveness`, `GET /actuator/health/readiness`, and **GET** on `/api/v1/products/**`, `/api/v1/categories/**`, `/api/v1/reviews/**`. |
-| **Any authenticated user** | All `/api/v1/cart/**` endpoints (get, add, update, remove, clear, checkout), `POST /api/v1/reviews`, `POST /api/v1/orders`, `GET /api/v1/orders/me`, `GET /api/v1/orders/{id}`, `GET /api/v1/orders/{id}/summary`, `PUT /api/v1/orders/{id}` — order read/update are additionally scoped so a non-admin can only touch their **own** orders. |
+| **Public (no token)** | `/api/v1/auth/**` (login, refresh, logout, `guest-session`, `forgot-password`, `reset-password`), `POST /api/v1/users`, Swagger/OpenAPI paths, `GET /uploads/**`, `GET /actuator/health`, `GET /actuator/health/liveness`, `GET /actuator/health/readiness`, and **GET** on `/api/v1/products/**`, `/api/v1/categories/**`, `/api/v1/reviews/**`. |
+| **Guest session (`X-Guest-Token`, no bearer)** | The whole buy flow without an account: `GET/POST /api/v1/cart`, `PATCH/DELETE /cart/items/{id}`, `DELETE /cart`, `POST /cart/checkout` (body must carry `email`), `/api/v1/payments/**` and `GET /api/v1/orders/{id}` — but only for rows whose `guest_token` column matches the header. See §7.3. |
+| **Any authenticated user** | All `/api/v1/cart/**` endpoints plus `POST /cart/merge`, `POST /api/v1/reviews`, `POST /api/v1/orders`, `POST /api/v1/orders/claim`, `GET /api/v1/users/me`, `PATCH /api/v1/users/me`, `POST /api/v1/users/me/password`, `GET /api/v1/orders/me`, `GET /api/v1/orders/{id}`, `GET /api/v1/orders/{id}/summary`, `PUT /api/v1/orders/{id}` — order read/update are additionally scoped so a non-admin can only touch their **own** orders. |
 | **`ROLE_ADMIN` only** | All **writes** on products and categories (POST/PUT/DELETE), `POST /api/v1/admin/products/{id}/image`, **DELETE** on reviews, the order **list** (`GET /api/v1/orders`), **DELETE** on orders, the entire `/api/v1/admin/**`, viewing any user's orders via `GET /api/v1/orders/user/{userId}`, and everything under `/actuator/**` except the health probes. |
 
 Anything not matched above requires authentication. `401 Unauthorized!` is returned when a token is missing, invalid, or blacklisted; `403 Forbidden!` when the caller is authenticated but lacks the role or ownership.
 
-### 7.3 Password & secret handling
+### 7.3 Guest identity (`ShopperIdentity`)
+
+A browser with no account still needs to shop, so a request resolves to exactly one of two
+subjects through one class rather than through scattered `userId` null-checks.
+
+- `POST /api/v1/auth/guest-session` returns an opaque **43-character** Base64url credential minted
+  by `SecureRandom`. Nothing is stored about it: the token *is* the identity, which is why the
+  frontend must keep it in `localStorage` and why losing it loses the bag.
+- Every cart, checkout, payment and order read resolves the caller through `ShopperIdentity`,
+  which prefers the bearer and falls back to `X-Guest-Token`. A bearer **always** wins when both
+  are present, so a signed-in tab cannot be handed someone else's guest cart by a stray header.
+- Ownership lives on the rows: `carts.guest_token`, `orders.guest_token`, `orders.guest_email`
+  (`V29`, with `user_id` nullable on both tables). No Redis structure holds guest state, so a cache
+  flush costs a guest their rate-limit counter and not their cart.
+- `guest_email` is stored apart from the shipping address because a delivery recipient and a
+  mailbox are different things — the receipt goes to the mailbox even when the parcel goes to a
+  gift recipient.
+- **Recovery paths.** `POST /cart/merge` folds a guest cart onto an account after a sign-in.
+  `POST /orders/claim` attaches one specific guest order to an account using the order's
+  **per-order `claim_token`**, mailed inside the confirmation — deliberately a different secret
+  from the session token, which unlocks that shopper's cart and every other order they placed and
+  so must never sit in a forwardable email. Claiming retires the token; a forwarded link cannot
+  hand the same order to a second account.
+
+### 7.4 Password & secret handling
 
 - `PasswordEncoderConfig` exposes a BCrypt encoder; plaintext passwords are never stored or returned.
 - The JWT secret comes from `JWT_SECRET`; the fallback in `application.yml` is a fixed dev-only value. Rotate it for any real deployment.
@@ -535,6 +560,7 @@ Design guarantees that are worth knowing before modifying the domain:
 | `V26__backfill_review_counts_and_scale` | Converts legacy 10-point ratings to the 1–5 scale (`rating / 2`), then backfills `review_count` and the live average from non-deleted reviews |
 | `V27__order_lookup_indexes` | PostgreSQL-only indexes on the referencing side of every FK (`orders.user_id`, `order_products.order_id`); MySQL already creates them, so its twin is empty and only keeps the sets version-aligned |
 | `V28__rebrand_catalogue_brand` | Rewrites the seeded brand from "Plain Thread" to "Nexus Commerce". V21 is left byte-for-byte intact because Flyway validates the checksum of applied migrations |
+| `V29__guest_identity` | Lets a cart or an order belong to a **browser session** instead of an account: `user_id` becomes nullable on both tables (no sentinel user row — a guest is not a user, and inventing one would put fake rows into every join, report and admin screen), plus `guest_token`, `orders.guest_email` and a unique `orders.claim_token`. Cart uniqueness survives the split because the live generated column is NULL for a guest row and NULLs never collide in a unique index; a mirror `live_guest_token` gives one live cart per session |
 
 > **Why V7 uses a stored procedure.** On a fresh MySQL 8.4 database, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` makes the server **automatically drop** the FK-supporting index `fk_review_order`, because the composite already covers it. An unconditional `DROP INDEX fk_review_order` therefore fails with `1091 Can't DROP` — exactly what broke CI before commit `2afc8e8`. V7 now wraps both drops in `drop_index_if_present`, which reads `information_schema.STATISTICS` first and no-ops when the index isn't there. This lets one migration apply cleanly to both fresh CI databases and older dev databases that pre-date the composite.
 
@@ -542,7 +568,7 @@ Design guarantees that are worth knowing before modifying the domain:
 
 ## 10. Redis state
 
-Redis stores five logically distinct kinds of state. Every key carries a namespace prefix so the different purposes are easy to inspect, expire selectively, or flush.
+Redis stores six logically distinct kinds of state. Every key carries a namespace prefix so the different purposes are easy to inspect, expire selectively, or flush.
 
 ### 10.1 Cache (`@Cacheable` / `@CacheEvict`)
 
@@ -553,7 +579,8 @@ Spring's **cache abstraction** (`@EnableCaching`) backed by **`RedisCacheManager
 - **TTLs (per cache):** list caches **5 min**, single-item caches **10 min**, aggregate `product:unique-categories` **15 min**. Each TTL carries ±10 % jitter so a fleet of entries does not expire in lockstep and stampede the database.
 - **Null caching:** on — a lookup of a non-existent id is memoized so it cannot hammer the DB.
 - **Transaction-aware:** puts/evictions are deferred until the surrounding transaction commits.
-- **Resilience:** a `CacheErrorHandler` degrades to the database on Redis failures, and 500 ms timeouts bound any hang. A local fallback (`spring.cache.type` != `redis`) uses an in-memory cache manager.
+- **Epoch guard (`EpochGuardedCache`):** deferring the eviction is necessary but not sufficient — a reader whose database load *spans* that commit still holds pre-commit rows and would write them back after the eviction lands. Each cache therefore carries an invalidation counter in Redis (`<namespace>:cache-epoch:<cacheName>`), bumped when a deferred eviction commits. A read that misses notes the counter, and the write is dropped if the counter moved while the load was in flight; the `sync = true` path compares the counter across the load and evicts the entry it raced. Cost is two Redis reads on a miss and zero on a hit. Without it, an admin edit can vanish from the category tree for the whole TTL.
+- **Resilience:** a `CacheErrorHandler` degrades to the database on Redis failures, and 500 ms timeouts bound any hang. An unreadable epoch is treated as "unknown" and the write proceeds — the guard must never be the reason a cache stops working. A local fallback (`spring.cache.type` != `redis`) uses an in-memory cache manager, unwrapped.
 
 ### 10.2 Cache names & key expressions
 
@@ -602,7 +629,7 @@ Two rules keep this cache from becoming a memory leak or a correctness hazard:
 
 | Prefix | Value | TTL | Notes |
 |--------|-------|-----|-------|
-| `idem::<userId>::<scope>::<key>` | `__IN_FLIGHT__` sentinel during the write, then the JSON `ApiResponse` on success | In-flight: 10 min; result: 24 h | Scopes in use: `orders` (POST /orders) and `cart-checkout` (POST /cart/checkout). Key is **user-scoped** so the same UUID from two different users is not replayed. Concurrent in-flight on the same key → `400`. Failed writes call `release()` and delete the key so the next attempt is fresh. |
+| `idem::<principal>::<scope>::<key>` | `__IN_FLIGHT__` sentinel during the write, then the JSON `ApiResponse` on success | In-flight: 10 min; result: 24 h | Scopes in use: `orders` (POST /orders) and `cart-checkout` (POST /cart/checkout). `<principal>` is `ShopperIdentity.principalKey()` — `user:<id>` for an account, `guest:<session token>` for a browser session — so the same UUID from two different shoppers is never replayed, and a guest and an account cannot collide on one slot. Concurrent in-flight on the same key → `400`. Failed writes call `release()` and delete the key so the next attempt is fresh. |
 
 ### 10.6 Login rate limit (`LoginRateLimiterInterceptor`)
 
@@ -610,7 +637,23 @@ Two rules keep this cache from becoming a memory leak or a correctness hazard:
 |--------|-------|-----|-------|
 | `rate::login::<client-ip>` | integer counter | `LOGIN_RATE_WINDOW_SECONDS` (default 60 s) | Fixed-window `INCR` with `EXPIRE` on first hit. Client IP = **rightmost** `X-Forwarded-For` hop (the trusted proxy's entry), else `getRemoteAddr`. Shared by `POST /api/v1/auth/login` (only failed attempts increment) and `POST /api/v1/users` (every registration attempt). `POST /api/v1/auth/refresh` is not limited. |
 
-### 10.7 Inspecting keys
+### 10.7 Cache invalidation epochs (`RedisCacheEpochs`)
+
+| Prefix | Value | TTL | Notes |
+|--------|-------|-----|-------|
+| `<namespace>:cache-epoch:<cacheName>` | integer counter | none | Bumped with `INCR` by `EpochGuardedCacheManager` when a deferred `@CacheEvict` commits. A read-through compares the counter across the database load and drops the write if it moved, which is what stops a slow reader from republishing a row an admin just changed. The counter lives in Redis rather than the JVM because every instance shares one cache — a per-process counter would say nothing about an eviction performed elsewhere. One key per cache name, tiny and permanent, keyed by the same namespace as the entries it guards. |
+
+### 10.8 Password reset links (`PasswordResetService`)
+
+| Prefix | Value | TTL | Notes |
+|--------|-------|-----|-------|
+| `pwreset::<opaque-token>` | `userId` (Long) | `RESET_TOKEN_TTL_MINUTES` (default 15 min) | Single-use: `consume()` does `GETDEL`. A token is an opaque random string, not a signed JWT, so a leaked reset link expires on its own and cannot be replayed. |
+| `pwreset-user::<userId>` | the token currently outstanding for that account | same | Lets a fresh request retire the previous link instead of leaving two live ways into one account. Only cleared when it still names the token being spent. |
+| `pwreset-cool::<userId>` | `"1"` | `RESET_SEND_COOLDOWN_SECONDS` (default 60 s) | `SETNX` gate on issuing. A repeat request inside the window answers the same 200 as a first one, so the mailer cannot be used as a probe or a flood. |
+
+Nothing about a reset survives in the database — there is no reset-token column, so an abandoned request leaves no state to clean up.
+
+### 10.9 Inspecting keys
 
 ```bash
 redis-cli -p 6379 KEYS "product:*"
@@ -621,6 +664,8 @@ redis-cli -p 6379 KEYS "jwt:blacklist::*"
 redis-cli -p 6379 KEYS "idem::*"
 redis-cli -p 6379 KEYS "rate::login::*"
 redis-cli -p 6379 GET "idem::4::orders::$(uuidgen)"
+redis-cli -p 6379 --scan --pattern "*:cache-epoch:*"
+redis-cli -p 6379 --scan --pattern "pwreset*"
 ```
 
 ---
@@ -693,7 +738,12 @@ List endpoints accept `?page=0&size=20` (defaults shown; `size` is clamped serve
 |--------|------|--------|------|
 | POST | `/api/v1/users` | Public | `CreateUserRequestDto` |
 | GET | `/api/v1/users/me` | Bearer | — |
+| PATCH | `/api/v1/users/me` | Bearer | `UpdateProfileRequestDto` |
+| POST | `/api/v1/users/me/password` | Bearer | `ChangePasswordRequestDto` |
 | POST | `/api/v1/auth/login` | Public (rate-limited) | `LoginRequestDto` |
+| POST | `/api/v1/auth/forgot-password` | Public | `ForgotPasswordRequestDto` |
+| POST | `/api/v1/auth/reset-password` | Public | `ResetPasswordRequestDto` |
+| POST | `/api/v1/auth/guest-session` | Public | — |
 | POST | `/api/v1/auth/refresh` | Public | `RefreshRequestDto` |
 | POST | `/api/v1/auth/logout` | Public (needs Bearer) | `RefreshRequestDto` |
 
@@ -746,6 +796,46 @@ Refresh response is identical in shape to the login response — new access toke
 ```
 
 Send the request with `Authorization: Bearer <current-access-token>`. Response has `data: null` and `message: "Signed out"`. Side effects: Redis key `jwt:blacklist::<current jti>` written with TTL = remaining access-token life; `refresh::<submitted token>` deleted.
+
+**Profile edit (`PATCH /api/v1/users/me`, `UpdateProfileRequestDto`)** — `name` is required, `phone` optional; email is the login identity and is deliberately not editable here:
+
+```json
+{ "name": "Rahul Sharma", "phone": "9888877766" }
+```
+
+Response `data` is the same shape as `GET /api/v1/users/me` and `message: "Profile updated"`.
+
+**Change password (`POST /api/v1/users/me/password`, `ChangePasswordRequestDto`):**
+
+```json
+{ "currentPassword": "secret123", "newPassword": "brandnewpass" }
+```
+
+A wrong `currentPassword` is **401** (`"Current password is incorrect."`), a new password outside 8–72 characters is **400**. On success every refresh token on the account is revoked — including the caller's — so the storefront re-authenticates with the password it just proved rather than sending the shopper back to the login screen.
+
+**Forgot password (`POST /api/v1/auth/forgot-password`):**
+
+```json
+{ "email": "rahul@example.com" }
+```
+
+Always **200** with `message: "If that address has an account, a reset link is on its way."`, whether or not the address exists or is disabled, so the endpoint cannot enumerate shoppers. When there is a live account, a single-use token is mailed as `<STOREFRONT_BASE_URL>/auth/reset-password?token=…`; the link lives `RESET_TOKEN_TTL_MINUTES` (default 15) and a per-account `RESET_SEND_COOLDOWN_SECONDS` (default 60) quiet period throttles repeat requests.
+
+**Reset password (`POST /api/v1/auth/reset-password`, `ResetPasswordRequestDto`):**
+
+```json
+{ "token": "<from the emailed link>", "password": "brandnewpass" }
+```
+
+The password is validated *before* the token is spent, so an over-long password cannot burn a single-use link. A token that is unknown, expired, or already consumed answers **400** with `"This reset link is invalid, has expired, or has already been used."`. Success revokes every refresh token on the account (message: `"Password reset; sign in with your new password."`).
+
+**Guest session (`POST /api/v1/auth/guest-session`)** — no body, no header:
+
+```json
+{ "guestToken": "Qh3n8p…43 characters…" }
+```
+
+Send the value back unchanged as `X-Guest-Token` on cart, checkout, and order calls. Nothing is stored server-side: the token *is* the session, and a cart or order row carries it in an ownership column. A malformed header (not exactly 43 URL-safe characters) is rejected by Spring's filter chain as **401** on every cart call, which is why the storefront drops a stored value that fails the shape instead of sending it.
 
 **Rate-limit behaviour** — a request is rejected with **429** once `LOGIN_RATE_MAX` failed sign-ins (or `LOGIN_RATE_MAX` registrations) have already been counted in the window:
 
@@ -848,7 +938,7 @@ and update uses it to clear the column (this is how the admin editor unsets a va
 Deactivating a style (`isActive: false`) also removes every size and colour it sells from the
 facet vocabulary, because the storefront must not offer a filter that now returns an empty page.
 
-### 12.5 Cart — `/api/v1/cart` (any authenticated user)
+### 12.5 Cart — `/api/v1/cart` (bearer **or** `X-Guest-Token`)
 
 | Method | Path | Body | Notes |
 |--------|------|------|-------|
@@ -857,15 +947,16 @@ facet vocabulary, because the storefront must not offer a filter that now return
 | PATCH | `/items/{id}` | `UpdateCartItemRequestDto` | Owner-scoped |
 | DELETE | `/items/{id}` | — | Owner-scoped |
 | DELETE | `/` | — | Empties the cart |
+| POST | `/merge` | — | Bearer required; optional `X-Guest-Token` |
 | POST | `/checkout` | optional `CreateOrderRequestDto`; optional `Idempotency-Key` header | 201 with the created order |
 
 **Add-to-cart body (`AddToCartRequestDto`):**
 
 ```json
-{ "productId": 1, "quantity": 2 }
+{ "productId": 1101, "variantId": 4312, "quantity": 2 }
 ```
 
-If the same `productId` is already on a line, the quantity is **added** to the existing line rather than creating a second one.
+A piece is bought in a size and a colour, so `variantId` is what the line carries; `productId` identifies the style. Omitting it is allowed only for a legacy row with a single variant (the V16 backfill) — an apparel style with no `variantId` is a **400**, never a guess. If the same **variant** is already on a line, the quantity is **added** to that line rather than creating a second one — a Medium and a Large stay separate rows.
 
 **Update cart item body (`UpdateCartItemRequestDto`):**
 
@@ -882,33 +973,58 @@ If the same `productId` is already on a line, the quantity is **added** to the e
   "items": [
     {
       "id": 41,
-      "productId": 1,
-      "productName": "Wireless Headphones",
+      "productId": 1102,
+      "productName": "Pima Cotton Oxford Shirt",
       "productImage": "/uploads/products/2f6a9b0d-…png",
-      "unitPrice": 4599.00,
-      "quantity": 5,
-      "lineTotal": 22995.00
+      "unitPrice": 1899.00,
+      "quantity": 2,
+      "lineTotal": 3798.00,
+      "variantId": 4312,
+      "sku": "PT-1102-M-BLA",
+      "variantSize": "M",
+      "variantColorName": "Black",
+      "variantColorHex": "#0F0F0F",
+      "variantStock": 14
     }
   ],
-  "grandTotal": 22995.00,
+  "grandTotal": 3798.00,
   "itemCount": 1
 }
 ```
 
+`userId` is **null** on a guest cart — the row belongs to the `X-Guest-Token` session, not to a user.
+
 Line totals / grand total are **computed at read time** from the current catalogue — they are not persisted snapshots (that's the order line items' job).
+
+**Merge (`POST /api/v1/cart/merge`)** — no body. Requires a bearer token; send the `X-Guest-Token` the browser has been using. Lines of the same product *and* variant are summed onto the account's cart, a line that no longer fits what is in stock is capped or dropped rather than failing the call, and the guest cart is retired. With no header it is a no-op (`message: "Cart unchanged"`); with one it answers `"Guest cart merged"` and returns the account's cart. The storefront calls it best-effort right after sign-in, so a failure there can never cost the shopper the session they just earned.
 
 **Checkout body** — optional override of the cart lines (`CreateOrderRequestDto` shape):
 
 ```json
 {
   "orderItems": [
-    { "productId": 1, "quantity": 2 },
-    { "productId": 7, "quantity": 1 }
+    { "productId": 1102, "variantId": 4312, "quantity": 2 },
+    { "productId": 1107, "variantId": 4488, "quantity": 1 }
   ]
 }
 ```
 
-Omit the body entirely to check out the cart **as-is**. Add `Idempotency-Key: <uuid>` (header) to make the submission retry-safe; scope is `"cart-checkout"` in the Redis key.
+An **account** picks a saved address: `{ "orderItems": [], "addressId": 9 }`. A **guest** sends the email and the destination inline — the only option someone with no address book has:
+
+```json
+{
+  "orderItems": [],
+  "email": "rahul@example.com",
+  "shipping": {
+    "recipientName": "Rahul Sharma", "phone": "9888877766",
+    "line1": "14 Lavelle Road", "line2": "Indiranagar",
+    "city": "Bengaluru", "state": "Karnataka",
+    "postalCode": "560038", "country": "IN"
+  }
+}
+```
+
+`shipping` takes precedence over `addressId`, and `email` is ignored for a signed-in caller (their account address is the destination). Omit the body entirely to check out the cart **as-is**. Add `Idempotency-Key: <uuid>` (header) to make the submission retry-safe; scope is `"cart-checkout"` in the Redis key, and the scope is **shopper**-scoped, so a guest token and an account id never replay each other.
 
 Empty cart → `400 InvalidRequestException`. Insufficient stock → `400`, cart is untouched. On success, the cart is cleared and the created order is returned in `data` with all snapshots.
 
@@ -916,7 +1032,8 @@ Empty cart → `400 InvalidRequestException`. Insufficient stock → `400`, cart
 
 | Method | Path | Access | Body | Cache |
 |--------|------|--------|------|-------|
-| POST | `/` | User (optional `Idempotency-Key`) | below | evict |
+| POST | `/` | User or guest session (optional `Idempotency-Key`) | below | evict |
+| POST | `/claim` | Bearer (no guest session) | below | evict |
 | GET | `/me` | User | page/size | — |
 | GET | `/{id}` | Owner/ADMIN | — | `order:by-id` |
 | GET | `/{id}/summary` | Owner/ADMIN | — | `order:summary` |
@@ -925,23 +1042,31 @@ Empty cart → `400 InvalidRequestException`. Insufficient stock → `400`, cart
 | GET | `/user/{userId}` | Owner/ADMIN | page/size | — |
 | DELETE | `/{id}` | ADMIN | — | evict |
 
-**POST body (`CreateOrderRequestDto`):** placed on the authenticated caller; reserves stock atomically. Add an `Idempotency-Key: <uuid>` header (scope `"orders"`) to make retries safe.
+**POST body (`CreateOrderRequestDto`):** placed on the caller resolved from the bearer token or the `X-Guest-Token` header; reserves stock atomically. Add an `Idempotency-Key: <uuid>` header (scope `"orders"`) to make retries safe. `variantId` is required for anything sold in more than one size+colour — a line with none is accepted only for a legacy row with exactly one variant, because guessing a size is how wrong garments get shipped. `email` and `shipping` only matter for a guest (see §12.5 for the guest shape).
 
 ```json
 {
   "orderItems": [
-    { "productId": 1, "quantity": 2 },
-    { "productId": 7, "quantity": 1 }
+    { "productId": 1102, "variantId": 4312, "quantity": 2 },
+    { "productId": 1107, "variantId": 4488, "quantity": 1 }
   ]
 }
 ```
+
+**Claim body (`ClaimOrderRequestDto`, `POST /api/v1/orders/claim`):** requires a bearer token — a guest has no business attaching orders to an identity — and the token mailed with the receipt:
+
+```json
+{ "claimToken": "Qh3n8p…43 characters…" }
+```
+
+Success returns the order in `data` (`message: "Order claimed"`) and permanently retires the token, so a forwarded email cannot hand the same order to a second account. A value that is not exactly 43 URL-safe characters is a **400**; a token that is unknown, already spent, or points at a retired order is a **404** with `"That claim link is not valid, has already been used, or belongs to a deleted order"`. The claim token is never in any API response — it exists only in the guest's confirmation mail, which is what keeps `X-Guest-Token` (unlocking that session's cart and *every* order it placed) and `claim_token` (one order, one use) separate secrets.
 
 **PUT body (`UpdateOrderRequestDto`):** `status` and/or `orderItems` actions. Blocked once the order is `DELIVERED` or `CANCELLED`.
 
 ```json
 {
   "status": "SHIPPED",
-  "orderItems": [ { "productId": 1, "quantity": 1, "action": "ADD" } ]
+  "orderItems": [ { "productId": 1102, "variantId": 4312, "quantity": 1, "action": "ADD" } ]
 }
 ```
 
@@ -1067,11 +1192,24 @@ If step 3 retries with the same key (client timeout, mobile reconnect), the resp
 |------|--------|-----|
 | 1 | Log in | `POST /auth/login` |
 | 2 | Fetch (or lazily create) cart | `GET /cart` |
-| 3 | Add 2 units of product 1 | `POST /cart/items` `{ "productId": 1, "quantity": 2 }` |
-| 4 | Add same product again → sums to 4 | `POST /cart/items` `{ "productId": 1, "quantity": 2 }` |
-| 5 | Bump one line | `PATCH /cart/items/41` `{ "quantity": 6 }` |
-| 6 | Remove another line | `DELETE /cart/items/42` |
-| 7 | Check out with idempotency | `POST /cart/checkout` (`Idempotency-Key: <uuid>`) |
+| 3 | Add 2 units of one size+colour | `POST /cart/items` `{ "productId": 1102, "variantId": 4312, "quantity": 2 }` |
+| 4 | Same variant again → sums to 4 | `POST /cart/items` `{ "productId": 1102, "variantId": 4312, "quantity": 2 }` |
+| 5 | Different size, same shirt → its own line | `POST /cart/items` `{ "productId": 1102, "variantId": 4313, "quantity": 1 }` |
+| 6 | Bump one line | `PATCH /cart/items/41` `{ "quantity": 6 }` |
+| 7 | Remove another line | `DELETE /cart/items/42` |
+| 8 | Check out with idempotency | `POST /cart/checkout` (`Idempotency-Key: <uuid>`) with `{ "addressId": 9 }` |
+
+### Scenario D: Buy as a guest, then claim the order
+
+| Step | Action | API |
+|------|--------|-----|
+| 1 | Open a session | `POST /auth/guest-session` → `{ "guestToken": "…" }` |
+| 2 | Fill the bag | `POST /cart/items` with `X-Guest-Token: <guestToken>` |
+| 3 | Reload the browser, keep the bag | `GET /cart` with the same header |
+| 4 | Pay | `POST /cart/checkout` (`Idempotency-Key: <uuid>`) with `email` + `shipping` in the body and the header |
+| 5 | Read the receipt | `GET /payments/orders/{id}/status` with the same header — ownership is the session token, no bearer needed |
+| 6 | Sign in | `POST /auth/login`, then `POST /cart/merge` with the same `X-Guest-Token` |
+| 7 | Claim the order | `POST /orders/claim` `{ "claimToken": "<from the mailed link>" }` with the bearer token |
 
 Checkout delegates to `OrderService.createOrder`, so the same atomic stock reservation and line-item snapshot logic runs. Empty cart → `400`. Insufficient stock → `400`, cart untouched.
 
@@ -1156,17 +1294,18 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 ### Public reads (cache)
 
 - [ ] `GET /api/v1/categories` ×2 → `GET /api/v1/categories/1` ×2
-- [ ] `GET /api/v1/products` ×2 → `/products/1` ×2 → `/products/1/details` ×2 → `/products/by-category/Electronics` ×2 → `/products/search?gender=unisex&sizes=M` ×2 → `/products/facets/sizes` ×2 → `/products/uniqueCategories` ×2
+- [ ] `GET /api/v1/products` ×2 → `/products/1102` ×2 → `/products/1102/details` ×2 → `/products/by-category/Mens Shirts` ×2 → `/products/search?gender=mens&sizes=M` ×2 → `/products/facets/sizes` ×2 → `/products/uniqueCategories` ×2
 - [ ] `GET /api/v1/reviews` ×2 → `/reviews/{id}` ×2 → `/reviews/product/1` ×2 → `/reviews/order/{id}` ×2
 
 ### Cart (authenticated)
 
 - [ ] `GET /api/v1/cart` → returns empty synthetic cart (no persisted row yet)
-- [ ] `POST /api/v1/cart/items` `{ "productId": 1, "quantity": 2 }` → **201**, one line
+- [ ] `POST /api/v1/cart/items` `{ "productId": 1102, "variantId": 4312, "quantity": 2 }` → **201**, one line
 - [ ] Same POST again with `quantity: 3` → **201**, cart still has **one** line with `quantity: 5`
+- [ ] Same `productId`, a different `variantId` → a **second** line (a Medium and a Large coexist)
 - [ ] `PATCH /api/v1/cart/items/{id}` `{ "quantity": 6 }` → line updated
 - [ ] `DELETE /api/v1/cart/items/{id}` → line removed
-- [ ] `POST /api/v1/cart/checkout` **with** `Idempotency-Key: <uuid>` → **201**; fire again with same key → **201** and Redis shows `idem::<uid>::cart-checkout::<key>` containing the identical order body — **no second order placed**
+- [ ] `POST /api/v1/cart/checkout` **with** `Idempotency-Key: <uuid>` → **201**; fire again with same key → **201** and Redis shows `idem::user::<uid>::cart-checkout::<key>` containing the identical order body — **no second order placed**
 - [ ] `POST /api/v1/cart/checkout` on an empty cart → **400**
 
 ### Orders (authenticated, owner-scoped)
@@ -1205,6 +1344,23 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 - [ ] `POST /api/v1/auth/login` with wrong password `LOGIN_RATE_MAX + 1` times → last request returns **429**
 - [ ] `redis-cli GET rate::login::127.0.0.1` shows the counter with TTL
 - [ ] `redis-cli DEL rate::login::127.0.0.1` clears it (useful after lockouts during testing)
+
+### Guest sessions & password recovery (Phase 8)
+
+- [ ] `POST /api/v1/auth/guest-session` (no header) → **200**, `data.guestToken` is 43 URL-safe characters
+- [ ] `POST /api/v1/cart/items` with `X-Guest-Token: <guestToken>` and no bearer → **201**, `data.userId` is **null**
+- [ ] `GET /api/v1/cart` with that header after a restart of the browser → the same line is still there
+- [ ] `GET /api/v1/cart` with a **different** session token → an empty cart, never the first shopper's bag
+- [ ] `POST /api/v1/cart/checkout` (`Idempotency-Key: <uuid>`, header, body `{ "email": "guest@example.com", "shipping": { … } }`) → **201**; Redis shows `idem::guest::<guestToken>::cart-checkout::<key>`
+- [ ] The same body with **no** `email` and no bearer → **400** (nothing to mail the receipt to, and no way to recover the order)
+- [ ] `POST /api/v1/payments/razorpay/orders/{id}` with a bearer token and the *guest's* order id → **403**
+- [ ] Sign in, then `POST /api/v1/cart/merge` with the guest header → **200**, `"Guest cart merged"`, lines summed, guest cart retired
+- [ ] `POST /api/v1/orders/claim` `{ "claimToken": "<from the mail>" }` with a bearer → **200**; the same token again → **404**; a 42-character value → **400**
+- [ ] `POST /api/v1/orders/claim` with **no** bearer → **401**
+- [ ] `POST /api/v1/auth/forgot-password` `{ "email": "nobody@nowhere.test" }` → **200** with the identical message a real address gets
+- [ ] `POST /api/v1/auth/reset-password` with a spent token → **400**; with a 7-character password → **400** and the token is **still** live
+- [ ] After a successful reset or password change, every `refresh::<token>` for that user is gone from Redis and the old refresh token returns **401**
+- [ ] `PATCH /api/v1/users/me` `{ "name": "New Name", "phone": "9888877766" }` → **200**; `GET /users/me` confirms it; `{ "name": "" }` → **400**
 
 ### Integrity spot-checks
 
@@ -1664,7 +1820,7 @@ average catches up with the evicted caches.
 |-------|-------|
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
-| Schema version (Flyway) | **V28** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
+| Schema version (Flyway) | **V29** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
 | Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.
