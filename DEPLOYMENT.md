@@ -137,8 +137,11 @@ window; that is expected.
      bytes**; JJWT rejects shorter HMAC-SHA keys and the app aborts at startup with a
      `JWT_SECRET must be at least 32 bytes` message. Rotating it signs every user out.
    - `CORS_ALLOWED_ORIGINS` — comma-separated **Vercel URL and the Render URL itself**:
-     `https://nexus-commerce.vercel.app,https://nexus-commerce-api.onrender.com`.
-     Swagger UI posts from the API's own origin and is subject to the same filter.
+     `https://<project>.vercel.app,https://nexus-commerce-api-brg7.onrender.com`.
+     Swagger UI posts from the API's own origin and is subject to the same filter. Note that
+     the storefront itself never needs an entry: the browser only ever calls the Vercel origin
+     and the Next BFF forwards to Render server-side, so this list is for direct API consumers.
+     A preview deployment's random `*.vercel.app` URL therefore needs no update either.
 3. Leave `PORT` unset; Render injects it and `server.port: ${PORT}` picks it up.
 4. Deploy. First boot runs the Flyway Postgres migrations, then `ddl-auto: validate` proves
    the entities match.
@@ -190,21 +193,34 @@ code deliberately tolerates would page on noise.
 
 ## 4. Vercel (frontend)
 
-1. Import `nexus-commerce-frontend`, framework preset **Next.js**, branch `main`.
+1. Import `nexus-commerce-frontend`, framework preset **Next.js**, branch `main`, Node 24 (matches
+   the frontend's `.github/workflows/ci.yml`; `engines.node` is `>=20.9.0`). Root directory is the
+   repo root — it is one Next app, not a workspace.
 2. Environment variables (Production + Preview):
 
    | Name | Value |
    |---|---|
-   | `API_BASE_URL` | `https://nexus-commerce-api.onrender.com` |
-   | `NEXT_IMAGE_HOSTS` | `<project-ref>.supabase.co` (the Storage public hostname, no scheme) |
+   | `API_BASE_URL` | `https://nexus-commerce-api-brg7.onrender.com` (no trailing slash; the `/uploads` rewrite and `backendUrl()` both trim it, but keep it clean) |
+   | `NEXT_IMAGE_HOSTS` | `yszqihpatohtcpatomjp.supabase.co` (the Storage public hostname, no scheme) |
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` — canonical origin for canonicals, Open Graph, `sitemap.ts`, `robots.ts` and JSON-LD |
    | `NEXT_PUBLIC_SUPPORT_EMAIL` | An address someone actually answers. `/contact` publishes it only when set; unset, the page says so plainly instead of printing an inbox nobody reads |
 
-   `STOREFRONT_BASE_URL` on the Render side and `NEXT_PUBLIC_SITE_URL` here must be the **same
-   origin** — the backend builds every emailed link from the former, so a mismatch sends
-   shoppers to a URL that is not the live store.
+   Set `API_BASE_URL` for **Preview as well as Production**: the build succeeds without it — CI
+   proves that, since no request is made at build time — but every catalogue read 500s at runtime,
+   because `backendUrl()` throws when the variable is missing.
 
-3. Deploy. `next/image` remote patterns are baked at build time, so changing
+   **No Razorpay variable belongs here.** Checkout reads the key id off the backend's payment
+   ticket, so the merchant credential never reaches the browser bundle.
+
+3. **Push-to-deploy is the Git integration from step 1, not a script.** A push to `main` publishes
+   production; any other branch or PR publishes a preview on its own URL. The GitHub Actions
+   workflow runs alongside and deploys nothing — to make a failing suite block a release, require
+   its check on `main` through branch protection.
+4. After the first deploy, set **`STOREFRONT_BASE_URL` on Render** to that Vercel origin and
+   redeploy the service. It and `NEXT_PUBLIC_SITE_URL` must be the **same origin** — the backend
+   builds every emailed password-reset and order-claim link from the former, so a mismatch mails
+   shoppers to a URL that is not the live store.
+5. Deploy. `next/image` remote patterns are baked at build time, so changing
    `NEXT_IMAGE_HOSTS` requires a redeploy. `NEXT_PUBLIC_SITE_URL` falls back to Vercel's
    production URL, but set it explicitly so previews and the sitemap never disagree.
 
