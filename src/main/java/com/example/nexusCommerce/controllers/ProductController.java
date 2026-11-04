@@ -56,7 +56,8 @@ public class ProductController {
     @Operation(summary="Get Product using specific Id",
                description="Fetches the specific product with the given Id. An unpublished draft is reported as 404."
     )
-    @GetMapping("/{id}")    public ResponseEntity<ApiResponse<GetProductResponseDto>> getProductById(@PathVariable Long id){
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<GetProductResponseDto>> getProductById(@PathVariable Long id){
         GetProductResponseDto product = productService.getProductById(id);
         return ResponseEntity.ok(ApiResponse.success(product, "Product fetched successfully!"));
     }
@@ -66,7 +67,8 @@ public class ProductController {
                 description="Fetched the Product with other details like its category using specific ID. "
                             + "An unpublished draft is reported as 404."
     )
-    @GetMapping("/{id}/details")    public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductWithDetailsById(@PathVariable Long id){
+    @GetMapping("/{id}/details")
+    public ResponseEntity<ApiResponse<GetProductWithDetailsResponseDto>> getProductWithDetailsById(@PathVariable Long id){
         GetProductWithDetailsResponseDto product = productService.getProductWithDetailsById(id);
         return ResponseEntity.ok(ApiResponse.success(product, "Product details fetched successfully!"));
     }
@@ -181,12 +183,11 @@ public class ProductController {
         return ResponseEntity.ok(ApiResponse.success(productService.getAvailableColors(), "Colors fetched successfully!"));
     }
 
-    // Task: Write an API to get all the unique categories
-
     @Operation(summary="Get all the unique Category available",
                description="Fetches the all the unique categories available in the catalogue."
     )
-    @GetMapping("/uniqueCategories")    public ResponseEntity<ApiResponse<List<String>>> getUniqueCategories(){
+    @GetMapping("/uniqueCategories")
+    public ResponseEntity<ApiResponse<List<String>>> getUniqueCategories(){
         List<String> categories = productService.getUniqueCategories();
         return ResponseEntity.ok(ApiResponse.success(categories, "Unique categories fetched successfully!"));
     }

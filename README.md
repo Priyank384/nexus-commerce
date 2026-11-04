@@ -223,7 +223,11 @@ RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
    ./gradlew test
    ```
 
-   Tests run against an in-memory H2 database; no external MySQL/Redis required.
+   Tests run against an in-memory H2 database; no external MySQL/Redis required. Among them,
+   `integration/HttpAuthorizationTest` pushes real signed tokens through the real Spring Security
+   chain, so the `ROLE_ADMIN` gates — the admin surface, `GET /orders`, the actuator, catalogue and
+   review writes, and which reads stay open to anonymous shoppers — fail CI if a rule is dropped,
+   rather than only being noticed during a manual pass.
 
 6. **Build the container image**:
 

@@ -393,6 +393,10 @@ NexusCommerce uses a **two-token model**:
 
 Anything not matched above requires authentication. `401 Unauthorized!` is returned when a token is missing, invalid, or blacklisted; `403 Forbidden!` when the caller is authenticated but lacks the role or ownership.
 
+This matrix is asserted, not just written down: `integration/HttpAuthorizationTest` drives it
+through the real filter chain with tokens signed by `JwtService` (§16.2). A rule added here has to
+be added there, or the row is unverified.
+
 ### 7.3 Guest identity (`ShopperIdentity`)
 
 A browser with no account still needs to shop, so a request resolves to exactly one of two
@@ -1496,6 +1500,22 @@ Service containers:
 
 - **MySQL** — `mysql:8.4` with `MYSQL_ALLOW_EMPTY_PASSWORD: "true"` and `MYSQL_DATABASE: nexuscommerce`. Healthcheck: `mysqladmin ping --silent`, 10 s interval, 10 retries.
 - **Redis** — `redis:7-alpine`. Healthcheck: `redis-cli ping`, 5 s interval, 10 retries.
+
+**What the unit phase actually guards on its own.** `integration/HttpAuthorizationTest` sends real
+requests with real tokens signed by `JwtService` through the real filter chain, so the
+`ROLE_ADMIN` gates are covered here and not only in a live session: every admin read
+(`/api/v1/admin/**`, `GET /api/v1/orders`, `/actuator/{metrics,info,prometheus}`) answers 401 to an
+anonymous caller and 403 to a shopper, an admin reaches all of them, catalogue and review writes are
+admin-only, `GET /api/v1/products*` and `/v3/api-docs` stay open without a token, `/actuator/health`
+stays open for probes, a token that fails to verify is treated as no credentials at all, and a
+denial never reaches its service. Its own test run proved the suite has teeth: flipping
+`/api/v1/admin/**` to `permitAll` fails four of its ten cases.
+
+The services are mocked because the only question is whether a request reaches the controller. Two
+properties make that question answerable inside the test profile: the actuator exposure list, which
+lives in the main `application.yml` that the test one replaces (without it `/actuator/metrics` is
+simply unmapped, and a 404 to an admin would read as a broken rule), and `redis` health, which has
+no server here and would turn `/actuator/health` red for a reason unrelated to authorization.
 
 CI env overrides (all scoped to the job):
 
