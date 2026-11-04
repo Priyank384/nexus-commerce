@@ -10,7 +10,6 @@ import static com.example.nexusCommerce.configs.CacheConfig.PRODUCT_SEARCH;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -50,8 +49,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ProductImageUploadService {
 
-    private static final Set<String> ALLOWED = Set.of("image/png", "image/jpeg", "image/webp");
     private static final long MAX_BYTES = 5L * 1024 * 1024;
+
+    private static final byte[] PNG_SIGNATURE = {
+            (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+    };
 
     private final ProductRepository productRepository;
     private final ProductImageRepository imageRepository;
@@ -200,15 +202,48 @@ public class ProductImageUploadService {
     private String store(MultipartFile file) {
         if (file == null || file.isEmpty()) throw new InvalidRequestException("file is required");
         if (file.getSize() > MAX_BYTES) throw new InvalidRequestException("image must be under 5 MB");
-        String contentType = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
-        if (!ALLOWED.contains(contentType)) {
-            throw new InvalidRequestException("only PNG, JPEG and WebP images are accepted");
-        }
+        byte[] bytes;
         try {
-            return imageStorage.store(file.getBytes(), extension(contentType), contentType);
+            bytes = file.getBytes();
         } catch (IOException e) {
             throw new InvalidRequestException("failed to read uploaded image: " + e.getMessage());
         }
+        String contentType = detectContentType(bytes);
+        if (contentType == null) {
+            throw new InvalidRequestException("only PNG, JPEG and WebP images are accepted");
+        }
+        return imageStorage.store(bytes, extension(contentType), contentType);
+    }
+
+    /**
+     * The type the bytes actually are. Content-Type is whatever the caller claims, and the storage
+     * adapter serves back the label it is handed, so trusting the header lets a file arrive as
+     * HTML or SVG and be handed out as image/png.
+     */
+    private static String detectContentType(byte[] bytes) {
+        if (startsWith(bytes, PNG_SIGNATURE)) {
+            return "image/png";
+        }
+        if (startsWith(bytes, new byte[] { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF })) {
+            return "image/jpeg";
+        }
+        if (bytes.length >= 12 && startsWith(bytes, new byte[] { 'R', 'I', 'F', 'F' })
+                && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P') {
+            return "image/webp";
+        }
+        return null;
+    }
+
+    private static boolean startsWith(byte[] bytes, byte[] signature) {
+        if (bytes.length < signature.length) {
+            return false;
+        }
+        for (int i = 0; i < signature.length; i++) {
+            if (bytes[i] != signature[i]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String extension(String contentType) {
