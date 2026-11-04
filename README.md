@@ -485,7 +485,7 @@ All endpoints below require `ROLE_ADMIN`.
 | `GET` | `/users/{id}` | Get a user. |
 | `PATCH` | `/users/{id}` | Update a user's `role` and/or `enabled` (last-active-admin can't be disabled). |
 | `PUT` | `/products/{id}/stock` | Set a product's stock (`SetStockRequestDto`: `stock` ≥ 0). **400 for a product with more than one variant** — restock those per variant. |
-| `POST` | `/products/{id}/image` | Multipart upload (`file`) — PNG/JPEG/WebP up to 5 MB. Writes under `UPLOAD_DIR` with a UUID filename, updates `product.image` to `/uploads/products/<file>` and returns the URL as the `data` field. |
+| `POST` | `/products/{id}/image` | Multipart upload (`file`) — PNG/JPEG/WebP up to 5 MB. Writes under `UPLOAD_DIR` with a UUID filename, updates `product.image` to `/uploads/products/<file>` and returns the URL as the `data` field. **Through the deployed storefront the usable ceiling is ~4 MB, not 5 MB** — Vercel rejects a request body over ~4.5 MB (`FUNCTION_PAYLOAD_TOO_LARGE`) before the Next.js handler runs, so the admin picker enforces that lower number. Calling this endpoint directly (Swagger, curl) still gets the full 5 MB. |
 | `POST` | `/products/{id}/images` | Append a multipart `file` to the product's gallery, after the current last position. Returns the new `GetProductImageResponseDto`. |
 | `DELETE` | `/products/{id}/images/{imageId}` | Soft-delete a gallery row, close the position gap and return the remaining ordered gallery. The file stays on disk so order snapshots keep resolving. |
 | `PUT` | `/products/{id}/images/order` | Reorder the gallery (`{ "imageIds": [...] }` — every live image id exactly once). Position 0 is the card thumbnail. |
