@@ -250,6 +250,56 @@ public class ProductRepositoryTest {
         assertEquals(List.of("Laptop"), result);
     }
 
+    @Test
+    void search_narrowsToProductsThatSellTheRequestedColour() {
+        persistVariant(phone, "M", "Olive");
+        persistVariant(laptop, "XL", "Bone");
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setColors(List.of("Olive"));
+
+        // The row says "Olive" and the DTO lowercases the request, so this only passes if the
+        // query folds both sides together instead of comparing them as written.
+        assertEquals(List.of("Phone"), titles(run(query)));
+
+        // The two facets are ANDed over the same product: Laptop has the size, Phone has the
+        // colour, and no product has both.
+        query.setSizes(List.of("XL"));
+        assertEquals(List.of(), titles(run(query)));
+    }
+
+    @Test
+    void search_narrowsToProductsThatSellTheRequestedSize() {
+        persistVariant(phone, "S", "Bone");
+        persistVariant(laptop, "XL", "Bone");
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setSizes(List.of("xl"));
+
+        assertEquals(List.of("Laptop"), titles(run(query)));
+    }
+
+    @Test
+    void search_stopsOfferingAColourWhoseLastVariantWasRetired() {
+        ProductVariant onlyOlive = persistVariant(phone, "M", "Olive");
+        persistVariant(laptop, "M", "Bone");
+
+        testEntityManager.remove(onlyOlive);
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setColors(List.of("Olive"));
+
+        // The EXISTS is JPQL, so the retired row is hidden only because ProductVariant carries
+        // @SQLRestriction -- the native ranked query spells the same condition out by hand.
+        assertEquals(List.of(), titles(run(query)));
+    }
+
     /**
      * The hydration half of the ranked path: it takes the ids the ranking query chose, and it
      * still has to hide a draft, because the native ranking query and this one are two
@@ -327,8 +377,8 @@ public class ProductRepositoryTest {
         testEntityManager.clear();
     }
 
-    private void persistVariant(Product product, String size, String colorName) {
-        testEntityManager.persistAndFlush(ProductVariant.builder()
+    private ProductVariant persistVariant(Product product, String size, String colorName) {
+        return testEntityManager.persistAndFlush(ProductVariant.builder()
                 .product(product)
                 .sku(product.getTitle() + "-" + size + "-" + colorName)
                 .size(size)

@@ -1517,6 +1517,14 @@ lives in the main `application.yml` that the test one replaces (without it `/act
 simply unmapped, and a 404 to an admin would read as a broken rule), and `redis` health, which has
 no server here and would turn `/actuator/health` red for a reason unrelated to authorization.
 
+**Why the size and colour filters are proven in SQL, not in a browser.** Every seeded piece is
+sold in all four sizes and all three colours, so `?colors=Olive` and `?sizes=L` legitimately return
+the same 30 products as no filter at all — on the live catalogue the two facet predicates are
+invisible, and a broken one would look exactly like correct behaviour. `ProductRepositoryTest`
+covers them where they can be seen: one product per colour/size, requesting a value whose stored
+casing differs from the normalised one, both facets ANDed over the same product, and a retired
+variant that must stop advertising the colour it was the last one in.
+
 CI env overrides (all scoped to the job):
 
 ```
