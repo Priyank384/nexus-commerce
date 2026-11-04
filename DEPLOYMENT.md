@@ -142,6 +142,10 @@ window; that is expected.
      the storefront itself never needs an entry: the browser only ever calls the Vercel origin
      and the Next BFF forwards to Render server-side, so this list is for direct API consumers.
      A preview deployment's random `*.vercel.app` URL therefore needs no update either.
+     That only holds because the BFF strips `Origin` and `Referer` before calling
+     (`src/app/api/v1/[...path]/route.ts`): a browser sends `Origin` on same-origin writes but not
+     on GETs, so forwarding it makes this filter 403 every add-to-bag, wishlist toggle and checkout
+     while every page still loads.
 3. Leave `PORT` unset; Render injects it and `server.port: ${PORT}` picks it up.
 4. Deploy. First boot runs the Flyway Postgres migrations, then `ddl-auto: validate` proves
    the entities match.
@@ -301,7 +305,9 @@ Run after every deploy, against the deployed URLs:
 
 - Razorpay stays in **test mode**; no real money moves and live keys are not configured.
 - Render free tier sleeps; first request after idle is slow.
-- No custom domain yet — the `*.vercel.app` / `*.onrender.com` hosts are used as-is.
+- No custom domain yet — the live pair is `https://nexus-commerce-frontend-ten.vercel.app` and
+  `https://nexus-commerce-api-brg7.onrender.com`. Adding a domain means updating
+  `STOREFRONT_BASE_URL` here and `NEXT_PUBLIC_SITE_URL` in Vercel in the same step.
 - The Supabase Storage bucket is public. That is intentional for product photography; do not
   store private files there.
 - Soft-deleting a product leaves its gallery objects in the bucket; deleting a gallery row
