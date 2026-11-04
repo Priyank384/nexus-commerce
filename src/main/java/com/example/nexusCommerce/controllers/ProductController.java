@@ -20,6 +20,7 @@ import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.dtos.GetVariantResponseDto;
 import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
+import com.example.nexusCommerce.dtos.ProductSearchResponseDto;
 import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.services.ProductService;
 import com.example.nexusCommerce.utils.ApiResponse;
@@ -101,24 +102,31 @@ public class ProductController {
     }
 
     @Operation(summary="Browse the catalogue by keyword and facets",
-               description="The storefront listing, collection and search pages. Filter by keyword (every word "
-                           + "must appear in the title, brand, description, material or category name), gender, "
-                           + "category slug (a parent slug matches its whole subtree), price range, sizes and "
-                           + "colours; sort by id, price, rating, createdAt or title. Unknown gender, category, "
-                           + "size or colour values are rejected rather than answered with an empty page. The "
-                           + "keyword is lowercased, whitespace-folded, stripped of LIKE metacharacters and "
-                           + "clamped to 64 characters before it becomes a cache key. Public; cached per query "
-                           + "combination."
+               description="The storefront listing, collection and search pages. Filter by keyword, gender, "
+                           + "category slug (a parent slug matches its whole subtree), price range, sizes and colours; "
+                           + "sort by id, price, rating, createdAt or title. Unknown gender, category, size or "
+                           + "colour values are rejected rather than answered with an empty page. The keyword is "
+                           + "lowercased, whitespace-folded, stripped of LIKE metacharacters and clamped to 64 "
+                           + "characters before it becomes a cache key.\n\n"
+                           + "A keyword that names a colour or a size the catalogue sells becomes a facet "
+                           + "filter instead of free text, so \"black tee\" is searched as colour=Black and the "
+                           + "text tee. Those choices are returned in inferredFacets, and textQuery is the "
+                           + "phrase actually matched -- both let a storefront show the filter as a chip and "
+                           + "hand back a URL that removes it.\n\n"
+                           + "On PostgreSQL, a keyword left at the default order is ranked by full-text relevance "
+                           + "(stemmed, weighted title over brand over material over description); an explicit "
+                           + "sort, or any query on another engine, matches the same rows by substring. "
+                           + "Public; cached per query combination."
     )
     @GetMapping("/search")
-    public ResponseEntity<ApiResponse<PageResponse<GetProductWithDetailsResponseDto>>> search(
+    public ResponseEntity<ApiResponse<ProductSearchResponseDto>> search(
             // Spring binds the DTO's fields as flat query params; without @ParameterObject,
             // springdoc advertises one nested "query" object that no HTTP caller can send.
             @ParameterObject @ModelAttribute ProductSearchRequestDto query){
         // Clamp at the web boundary: the cache key inside the service is built from these
         // numbers, so an unclamped size would fragment the cache over identical result sets.
         query.setSize(Pagination.clampSize(query.getSize()));
-        PageResponse<GetProductWithDetailsResponseDto> products = productService.search(query);
+        ProductSearchResponseDto products = productService.search(query);
         return ResponseEntity.ok(ApiResponse.success(products, "Products fetched successfully!"));
     }
 

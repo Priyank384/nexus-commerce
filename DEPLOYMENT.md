@@ -69,6 +69,18 @@ The pooler also caps concurrent sessions per project; ten is enough for one inst
 leaves room for Flyway and a psql session. Session mode is used (not transaction mode)
 because Flyway and Hibernate advisories rely on session state.
 
+V30 runs `CREATE EXTENSION IF NOT EXISTS pg_trgm` and adds a `STORED` generated `tsvector`
+column. Both need more than plain table privileges: Supabase's `postgres` role can install
+`pg_trgm` from the dashboard's Database → Extensions page, so if that migration fails with
+`permission denied to create extension "pg_trgm"`, enable it there (or grant it) before
+retrying. The prod profile hard-codes `app.flyway.repair: false`, so a failed V30 leaves a
+failed history row that blocks every later boot until it is repaired — set `APP_FLYWAY_REPAIR=true`
+for one deploy (an OS environment variable outranks the profile file, and Boot's relaxed
+binding maps it to that property), then remove it, or delete the `success = false` row from
+`nexuscommercedb.flyway_schema_history` by hand. The `STORED` column rewrites `products`
+once; on the seed catalogue that is instant, but on a real catalogue pick a quiet moment for
+the deploy that first applies V30.
+
 ### Upstash Redis
 
 Create a Regional database (free tier), TLS enabled by default. Copy the single connection
@@ -250,6 +262,13 @@ Run after every deploy, against the deployed URLs:
     `src/lib/content/policy.ts` on the frontend; confirm the numbers are ones the business
     intends to keep.
 
+11. **Search** — on the deployed storefront, `/products?keyword=black+tee` shows a
+    "Filtered by your own words: Colour: Black" chip above results, and clicking it lands on
+    `/products?keyword=tee` with the results still there. Then `/products?keyword=blck+tee`
+    (a mistype) must still find them — if it does not, V30 did not apply or `pg_trgm` is
+    missing. A search with `&sort=price,desc` deliberately uses the slower substring path;
+    that is the intended trade, not a regression.
+
 ## 7. Operations
 
 - **Deploy:** push to `dev` (backend) / `main` (frontend); both platforms auto-deploy.
@@ -271,5 +290,10 @@ Run after every deploy, against the deployed URLs:
   store private files there.
 - Soft-deleting a product leaves its gallery objects in the bucket; deleting a gallery row
   does remove the object.
+- Full-text **ranking is PostgreSQL-only**. Point `DB_URL` at MySQL and every keyword search
+  still works — it just runs the substring `LIKE` path, so results come back in the requested
+  sort rather than by relevance, and `inferredFacets` / `textQuery` are still populated (the
+  inference is Java, not SQL). Nothing needs reconfiguring when the engine changes; the app
+  detects it from the JDBC connection.
 - If the pooler host changes (Supabase occasionally moves poolers between regions), update
   `DB_URL`; the direct host is not a workaround.

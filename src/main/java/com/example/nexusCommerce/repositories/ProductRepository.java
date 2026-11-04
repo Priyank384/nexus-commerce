@@ -85,10 +85,10 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
      * cannot be compared to NULL in JPQL: zero means "no filter", and the list always holds
      * at least one element so no engine has to render an empty IN ().
      *
-     * {@code keyword1..4} arrive already sanitised and wrapped as LIKE patterns
-     * (see {@link ProductSearchRequestDto#keywordTokens()}). They are ANDed, so a shopper
-     * typing "organic crew tee" finds "Organic Cotton Crew Tee"; a single contiguous LIKE
-     * would answer that reasonable query with an empty page.
+     * {@code keyword1..4} arrive already sanitised and wrapped as LIKE patterns by
+     * {@link com.example.nexusCommerce.search.SearchPlan#likePatterns()}. They are ANDed, so a
+     * shopper typing "organic crew tee" finds "Organic Cotton Crew Tee"; a single contiguous
+     * LIKE would answer that reasonable query with an empty page.
      */
     @Query(value = """
             SELECT p FROM Product p
@@ -155,6 +155,86 @@ public interface ProductRepository extends JpaRepository<Product, Long>{
                          @Param("colors") List<String> colors,
                          @Param("colorCount") int colorCount,
                          Pageable pageable);
+
+    /**
+     * Relevance-ranked catalogue search, PostgreSQL only (see
+     * {@link com.example.nexusCommerce.search.DatabaseSearchSupport} for who gets to call it).
+     *
+     * <p>It mirrors {@link #search} predicate for predicate, and the mirrors matter: a native
+     * query is invisible to Hibernate, so {@code @SQLRestriction} is not applied to
+     * {@code deleted_datetime}, a fetch join is not available, and the soft-delete guard has to
+     * be written on every table the query touches. The two paths return the same rows for the
+     * same filter; this one orders them by {@code ts_rank} instead of by id.
+     *
+     * <p>The category-name {@code LIKE} branch is not a leftover. A generation expression can
+     * only read its own row, so {@code search_text} holds the product's words and never the
+     * collection's; without this branch, searching "tees" would stop finding the T-Shirts
+     * category the way the LIKE path always has.
+     *
+     * <p>It returns ids, not entities: {@code ORDER BY ts_rank} cannot be combined with a fetch
+     * join in SQL, so the page of ids is handed to {@link #findSearchResultsByIdIn} to be
+     * hydrated with its category in one more query, and the service puts them back in rank
+     * order. Two queries, no N+1.
+     */
+    @Query(value = """
+            SELECT p.id FROM products p
+            JOIN categories c ON c.id = p.category_id AND c.deleted_datetime IS NULL
+            LEFT JOIN categories pc ON pc.id = c.parent_id AND pc.deleted_datetime IS NULL
+            WHERE p.deleted_datetime IS NULL
+              AND p.is_active = TRUE
+              AND (:gender IS NULL OR LOWER(p.gender) = :gender)
+              AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:minPrice IS NULL OR p.price >= :minPrice)
+              AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+              AND (:sizeCount = 0 OR EXISTS (
+                    SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+                      AND v.deleted_datetime IS NULL AND LOWER(v.size) IN (:sizes)))
+              AND (:colorCount = 0 OR EXISTS (
+                    SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+                      AND v.deleted_datetime IS NULL AND LOWER(v.color_name) IN (:colors)))
+              AND (p.search_text @@ websearch_to_tsquery('english', :phrase)
+                   OR LOWER(c.name) LIKE :categoryWord)
+            ORDER BY ts_rank(p.search_text, websearch_to_tsquery('english', :phrase)) DESC, p.id ASC
+            """,
+        countQuery = """
+            SELECT COUNT(p.id) FROM products p
+            JOIN categories c ON c.id = p.category_id AND c.deleted_datetime IS NULL
+            LEFT JOIN categories pc ON pc.id = c.parent_id AND pc.deleted_datetime IS NULL
+            WHERE p.deleted_datetime IS NULL
+              AND p.is_active = TRUE
+              AND (:gender IS NULL OR LOWER(p.gender) = :gender)
+              AND (:categorySlug IS NULL OR LOWER(c.slug) = :categorySlug OR LOWER(pc.slug) = :categorySlug)
+              AND (:minPrice IS NULL OR p.price >= :minPrice)
+              AND (:maxPrice IS NULL OR p.price <= :maxPrice)
+              AND (:sizeCount = 0 OR EXISTS (
+                    SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+                      AND v.deleted_datetime IS NULL AND LOWER(v.size) IN (:sizes)))
+              AND (:colorCount = 0 OR EXISTS (
+                    SELECT 1 FROM product_variants v WHERE v.product_id = p.id
+                      AND v.deleted_datetime IS NULL AND LOWER(v.color_name) IN (:colors)))
+              AND (p.search_text @@ websearch_to_tsquery('english', :phrase)
+                   OR LOWER(c.name) LIKE :categoryWord)
+            """,
+        nativeQuery = true)
+    Page<Long> searchIdsByRelevance(@Param("gender") String gender,
+                                   @Param("categorySlug") String categorySlug,
+                                   @Param("phrase") String phrase,
+                                   @Param("categoryWord") String categoryWord,
+                                   @Param("minPrice") BigDecimal minPrice,
+                                   @Param("maxPrice") BigDecimal maxPrice,
+                                   @Param("sizes") List<String> sizes,
+                                   @Param("sizeCount") int sizeCount,
+                                   @Param("colors") List<String> colors,
+                                   @Param("colorCount") int colorCount,
+                                   Pageable pageable);
+
+    /**
+     * Hydration for {@link #searchIdsByRelevance}: the ranked ids, with each row's category
+     * fetched, in one query. The active flag is re-checked here because a draft published
+     * between the two statements must still not reach a shopper.
+     */
+    @Query("SELECT p FROM Product p JOIN FETCH p.category WHERE p.isActive = TRUE AND p.id IN :ids")
+    List<Product> findSearchResultsByIdIn(@Param("ids") List<Long> ids);
 
     @EntityGraph(attributePaths = {"category", "category.parent"})
     Optional<Product> findBySlugIgnoreCase(String slug);

@@ -13,7 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.ArgumentCaptor;
@@ -30,6 +33,9 @@ import com.example.nexusCommerce.adapters.ProductAdapter;
 import com.example.nexusCommerce.dtos.CreateProductRequestDto;
 import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
+import com.example.nexusCommerce.dtos.InferredFacetDto;
+import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
+import com.example.nexusCommerce.dtos.ProductSearchResponseDto;
 import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
@@ -44,6 +50,7 @@ import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductImage;
 import com.example.nexusCommerce.schema.ProductVariant;
+import com.example.nexusCommerce.search.DatabaseSearchSupport;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
 
@@ -70,6 +77,9 @@ class ProductServiceTest {
 
     @Spy
     private ProductAdapter productAdapter = new ProductAdapter();
+
+    @Mock
+    private DatabaseSearchSupport searchSupport;
 
     @InjectMocks
     private ProductServiceImpl productService;
@@ -428,5 +438,164 @@ class ProductServiceTest {
         List<String> result = productService.getUniqueCategories();
 
         assertEquals(2, result.size());
+    }
+
+    private ProductSearchRequestDto searchQuery(String keyword) {
+        ProductSearchRequestDto query = new ProductSearchRequestDto();
+        query.setKeyword(keyword);
+        return query;
+    }
+
+    private Product catalogueProduct(Long id, String title) {
+        Category category = Category.builder().name("Tops").build();
+        category.setId(3L);
+        Product product = Product.builder()
+                .title(title)
+                .description("A " + title)
+                .price(BigDecimal.valueOf(1200))
+                .rating(BigDecimal.valueOf(4.4))
+                .category(category)
+                .build();
+        product.setId(id);
+        return product;
+    }
+
+    private void publishFacetVocabulary() {
+        when(productRepository.findUniqueVariantSizes()).thenReturn(List.of("M", "L"));
+        when(productRepository.findUniqueVariantColors()).thenReturn(List.of("Black", "Bone"));
+    }
+
+    @Test
+    void search_onPostgresRanksByRelevanceAndKeepsThatOrder() {
+        publishFacetVocabulary();
+        when(searchSupport.supportsRankedTextSearch()).thenReturn(true);
+        // Hydration comes back in database order; the rank order the first query chose is the
+        // one the shopper has to see.
+        when(productRepository.searchIdsByRelevance(any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(2L, 1L), PageRequest.of(0, 20), 2));
+        when(productRepository.findSearchResultsByIdIn(List.of(2L, 1L)))
+                .thenReturn(List.of(catalogueProduct(1L, "Merino Crew Sock"),
+                        catalogueProduct(2L, "Organic Cotton Crew Tee")));
+
+        ProductSearchResponseDto result = productService.search(searchQuery("crew tee"));
+
+        assertEquals(List.of("Organic Cotton Crew Tee", "Merino Crew Sock"),
+                result.getContent().stream().map(GetProductWithDetailsResponseDto::getTitle).toList());
+        assertEquals("crew tee", result.getTextQuery());
+        assertTrue(result.getInferredFacets().isEmpty());
+        assertEquals(2, result.getTotalElements());
+        // The ranked statement orders by ts_rank itself. A Pageable that also carries a sort
+        // makes Spring Data append a second ORDER BY to the native SQL, which Postgres rejects.
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(productRepository).searchIdsByRelevance(any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), pageable.capture());
+        assertTrue(pageable.getValue().getSort().isUnsorted());
+        verify(productRepository, never()).search(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), anyInt(), any(), anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void search_aRankedPageWithNothingInItDoesNotAskForHydration() {
+        publishFacetVocabulary();
+        when(searchSupport.supportsRankedTextSearch()).thenReturn(true);
+        when(productRepository.searchIdsByRelevance(any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        ProductSearchResponseDto result = productService.search(searchQuery("waistcoat"));
+
+        assertTrue(result.getContent().isEmpty());
+        assertEquals(0, result.getTotalElements());
+        verify(productRepository, never()).findSearchResultsByIdIn(any());
+    }
+
+    @Test
+    void search_anExplicitSortBeatsRelevanceAndStaysOnTheLikePath() {
+        publishFacetVocabulary();
+        when(productRepository.search(any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(page(List.of(catalogueProduct(1L, "Linen Shirt"))));
+
+        ProductSearchRequestDto query = searchQuery("shirt");
+        query.setSort("price,desc");
+        ProductSearchResponseDto result = productService.search(query);
+
+        assertEquals(List.of("Linen Shirt"),
+                result.getContent().stream().map(GetProductWithDetailsResponseDto::getTitle).toList());
+        verify(productRepository, never()).searchIdsByRelevance(any(), any(), any(), any(), any(),
+                any(), any(), anyInt(), any(), anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void search_repeatingTheDefaultSortStillGetsRelevance() {
+        publishFacetVocabulary();
+        when(searchSupport.supportsRankedTextSearch()).thenReturn(true);
+        when(productRepository.searchIdsByRelevance(any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(1L), PageRequest.of(0, 20), 1));
+        when(productRepository.findSearchResultsByIdIn(List.of(1L)))
+                .thenReturn(List.of(catalogueProduct(1L, "Organic Cotton Crew Tee")));
+
+        // An omitted sort and an explicit id,asc hash to the same cache key, so they must also run
+        // the same query -- otherwise whichever arrives first is served to the other.
+        ProductSearchRequestDto query = searchQuery("tee");
+        query.setSort("id,asc");
+        ProductSearchResponseDto result = productService.search(query);
+
+        assertEquals(List.of("Organic Cotton Crew Tee"),
+                result.getContent().stream().map(GetProductWithDetailsResponseDto::getTitle).toList());
+        verify(productRepository, never()).search(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), anyInt(), any(), anyInt(), any(Pageable.class));
+    }
+
+    @Test
+    void search_offPostgresMatchesTheSameRowsBySubstring() {
+        publishFacetVocabulary();
+        when(searchSupport.supportsRankedTextSearch()).thenReturn(false);
+        when(productRepository.search(any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(page(List.of(catalogueProduct(1L, "Linen Shirt"))));
+
+        ProductSearchResponseDto result = productService.search(searchQuery("shirt"));
+
+        assertEquals(List.of("Linen Shirt"),
+                result.getContent().stream().map(GetProductWithDetailsResponseDto::getTitle).toList());
+        verify(productRepository, never()).searchIdsByRelevance(any(), any(), any(), any(), any(),
+                any(), any(), anyInt(), any(), anyInt(), any(Pageable.class));
+    }
+
+    /**
+     * The reason "black tee" used to answer with an empty page: no product carries the word
+     * black in its own text, because colour lives on the variant. The word has to leave the
+     * text and arrive as a filter, and the response has to say that it did.
+     */
+    @Test
+    void search_aColourWordInTheQueryIsSentAsAFacetFilter() {
+        publishFacetVocabulary();
+        when(searchSupport.supportsRankedTextSearch()).thenReturn(false);
+        when(productRepository.search(any(), any(), any(), any(), any(), any(), any(), any(),
+                any(), anyInt(), any(), anyInt(), any(Pageable.class)))
+                .thenReturn(page(List.of(catalogueProduct(1L, "Organic Cotton Crew Tee"))));
+
+        ProductSearchResponseDto result = productService.search(searchQuery("black tee"));
+
+        verify(productRepository).search(isNull(), isNull(), eq("%tee%"), isNull(), isNull(), isNull(),
+                isNull(), isNull(), eq(List.of("")), eq(0), eq(List.of("black")), eq(1),
+                any(Pageable.class));
+        assertEquals("tee", result.getTextQuery());
+        assertEquals(List.of(new InferredFacetDto("color", "Black", "black")), result.getInferredFacets());
+    }
+
+    @Test
+    void search_aFacetNoProductIsSoldInIsRejectedBeforeAnyQueryRuns() {
+        publishFacetVocabulary();
+
+        ProductSearchRequestDto query = searchQuery("tee");
+        query.setColors(List.of("Navy"));
+
+        assertThrows(InvalidRequestException.class, () -> productService.search(query));
+        verify(productRepository, never()).search(any(), any(), any(), any(), any(), any(), any(),
+                any(), any(), anyInt(), any(), anyInt(), any(Pageable.class));
     }
 }

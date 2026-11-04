@@ -46,7 +46,14 @@ public class CacheConfig implements CachingConfigurer {
     public static final String PRODUCT_DETAILS = "product:details";
     public static final String PRODUCT_BY_CATEGORY = "product:by-category";
     public static final String PRODUCT_UNIQUE_CATEGORIES = "product:unique-categories";
-    public static final String PRODUCT_SEARCH = "product:search";
+    /**
+     * Versioned because the payload type is written into the value itself (see valueSerializer):
+     * Phase 9 replaced the cached page with ProductSearchResponseDto, and an entry the previous
+     * build stored would come back as the wrong class and fail the request. A renamed cache simply
+     * never reads the old shape — the deployed app and the new one stop sharing entries the
+     * moment either starts, and the stale keys age out on their own TTL.
+     */
+    public static final String PRODUCT_SEARCH = "product:search:v2";
 
     public static final String VARIANT_SIZE_VALUES = "variant:sizes";
     public static final String VARIANT_COLOR_VALUES = "variant:colors";

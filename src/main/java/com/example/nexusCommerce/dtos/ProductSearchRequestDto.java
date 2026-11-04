@@ -2,7 +2,6 @@ package com.example.nexusCommerce.dtos;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +24,13 @@ public class ProductSearchRequestDto {
 
     public static final Set<String> ALLOWED_SORT_FIELDS =
             Set.of("id", "price", "rating", "createdAt", "title");
+    /**
+     * The order a listing falls back to, in the same {@code field:direction} shape
+     * {@link com.example.nexusCommerce.utils.Pagination#canonicalSort} emits. Search compares
+     * against this to decide whether the caller asked for an order at all -- an omitted {@code
+     * sort} and an explicit {@code id,asc} hash to one cache key, so they have to take one path.
+     */
+    public static final String DEFAULT_SORT = "id:asc";
     public static final int MAX_FACET_VALUES = 12;
     /** Longer than any real query, and it keeps a cache key from being megabytes wide. */
     public static final int MAX_KEYWORD_LENGTH = 64;
@@ -88,26 +94,20 @@ public class ProductSearchRequestDto {
     }
 
     /**
-     * The query ANDs over each word rather than matching the phrase, so "organic crew tee"
-     * still finds "Organic Cotton Crew Tee" — a contiguous {@code LIKE} answers a reasonable
-     * multi-word query with an empty page. Exactly {@link #MAX_KEYWORD_TOKENS} entries are
-     * always returned, padded with nulls, because the JPQL branches switch themselves off on
-     * null and a shorter list would not bind. Words past the cap are ignored, which is why the
-     * cache key uses the whole phrase instead of these tokens.
+     * The words of the query, in order, capped at {@link #MAX_KEYWORD_TOKENS}. They are handed
+     * to {@code SearchPlan}, which decides which of them are really facet choices and which
+     * stay free text -- the ANDing, the LIKE wrapping and the null padding that keeps the JPQL
+     * arity fixed all happen there.
      */
-    public List<String> keywordTokens() {
+    public List<String> keywordWords() {
         String phrase = normalizedKeyword();
-        List<String> tokens = new ArrayList<>();
+        List<String> words = new ArrayList<>();
         for (String word : phrase == null ? new String[0] : phrase.split(" ")) {
-            if (!word.isBlank() && tokens.size() < MAX_KEYWORD_TOKENS) {
-                tokens.add("%" + word + "%");
+            if (!word.isBlank() && words.size() < MAX_KEYWORD_TOKENS) {
+                words.add(word);
             }
         }
-        while (tokens.size() < MAX_KEYWORD_TOKENS) {
-            tokens.add(null);
-        }
-        // List.copyOf rejects nulls, and the padding is what keeps the arity fixed.
-        return Collections.unmodifiableList(tokens);
+        return List.copyOf(words);
     }
 
     /** Trim, lowercase, de-duplicate and sort so the key is order-independent. */
@@ -146,7 +146,7 @@ public class ProductSearchRequestDto {
 
     public String normalizedSort() {
         if (sort == null || sort.isBlank()) {
-            return "id:asc";
+            return DEFAULT_SORT;
         }
         String[] parts = sort.trim().split(",");
         String field = parts[0].trim();

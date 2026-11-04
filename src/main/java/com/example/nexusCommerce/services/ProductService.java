@@ -7,6 +7,7 @@ import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.dtos.GetVariantResponseDto;
 import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
+import com.example.nexusCommerce.dtos.ProductSearchResponseDto;
 import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.utils.PageResponse;
 
@@ -16,7 +17,8 @@ public interface ProductService {
     GetProductWithDetailsResponseDto getProductWithDetailsById(Long id);
     GetProductWithDetailsResponseDto getProductWithDetailsForAdmin(Long id);
     GetProductWithDetailsResponseDto getProductBySlug(String slug);
-    PageResponse<GetProductWithDetailsResponseDto> search(ProductSearchRequestDto query);
+    ProductSearchResponseDto search(ProductSearchRequestDto query);
+
     List<String> getAvailableSizes();
     List<String> getAvailableColors();
     List<GetVariantResponseDto> getVariants(Long productId);

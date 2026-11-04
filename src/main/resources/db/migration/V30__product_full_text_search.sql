@@ -1,0 +1,6 @@
+-- Intentionally empty. Full-text search is a PostgreSQL-only accelerator: MySQL's FULLTEXT
+-- index cannot be driven from the dialect-neutral LIKE query this track runs, and adding one
+-- would be an index nothing executes. The search service detects the engine at runtime and
+-- keeps MySQL (and the H2 test database) on the LIKE path, which returns the same rows -- it
+-- just cannot rank them or stem a word. The file exists to keep both migration sets
+-- version-aligned, exactly as V27 does for the PostgreSQL-only lookup indexes.

@@ -23,6 +23,7 @@ import com.example.nexusCommerce.repositories.ProductRepository;
 import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductVariant;
+import com.example.nexusCommerce.search.SearchPlan;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace=AutoConfigureTestDatabase.Replace.ANY)
@@ -249,19 +250,42 @@ public class ProductRepositoryTest {
         assertEquals(List.of("Laptop"), result);
     }
 
+    /**
+     * The hydration half of the ranked path: it takes the ids the ranking query chose, and it
+     * still has to hide a draft, because the native ranking query and this one are two
+     * statements and a product can be unpublished between them.
+     */
+    @Test
+    void findSearchResultsByIdIn_returnsThoseProductsAndNoDraft() {
+        Product draft = persistProduct("Draft Tee", electronicsCategory);
+        draft.setIsActive(false);
+        testEntityManager.merge(draft);
+        testEntityManager.flush();
+        testEntityManager.clear();
+
+        List<Product> found = productRepository.findSearchResultsByIdIn(
+                List.of(phone.getId(), laptop.getId(), draft.getId()));
+
+        assertEquals(List.of("Laptop", "Phone"), titles(found));
+        assertEquals("Electronics", found.get(0).getCategory().getName());
+    }
+
     /** Goes through the DTO so the test exercises the same normalisation the HTTP path does. */
-    private List<Product> search(String keyword) {
-        ProductSearchRequestDto query = new ProductSearchRequestDto();
+    private List<Product> search(String keyword) {        ProductSearchRequestDto query = new ProductSearchRequestDto();
         query.setKeyword(keyword);
         return run(query);
     }
 
     private List<Product> run(ProductSearchRequestDto query) {
-        List<String> keywords = query.keywordTokens();
-        List<String> sizes = query.normalizedSizes();
-        List<String> colors = query.normalizedColors();
+        // Empty vocabularies: this test is about the LIKE query, not about which words the
+        // service would have turned into facets on the way here.
+        SearchPlan plan = SearchPlan.of(query.keywordWords(), query.normalizedColors(),
+                query.normalizedSizes(), List.of(), List.of());
+        List<String> patterns = plan.likePatterns();
+        List<String> sizes = plan.sizes();
+        List<String> colors = plan.colors();
         return productRepository.search(query.normalizedGender(), query.normalizedCategorySlug(),
-                keywords.get(0), keywords.get(1), keywords.get(2), keywords.get(3),
+                patterns.get(0), patterns.get(1), patterns.get(2), patterns.get(3),
                 query.getMinPrice(), query.getMaxPrice(),
                 sizes.isEmpty() ? List.of("") : sizes, sizes.size(),
                 colors.isEmpty() ? List.of("") : colors, colors.size(),

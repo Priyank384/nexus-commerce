@@ -41,7 +41,7 @@ Complete reference for setup, technology stack, authentication, architecture, da
 
 Every call beyond public browsing is secured with a **stateless JWT bearer token** and **role-based authorization**. Failed sign-ins and registration attempts share one IP-keyed Redis fixed-window counter (§17.2).
 
-All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V29`) and Hibernate runs in `validate` mode only.
+All REST responses use a consistent **`ApiResponse<T>`** envelope. Read-heavy product, order, category, and review GET endpoints are cached in **Redis** through Spring's cache abstraction, and every write **evicts** the affected cache entries. **MySQL** is the system of record (PostgreSQL is a peer migration set, see §9); **Flyway** owns the schema (`V1`–`V30`) and Hibernate runs in `validate` mode only.
 
 Observability ships in two layers: **Spring Boot Actuator + Micrometer + Prometheus** for self-hosted metrics (admin-gated), and the **New Relic Java APM agent** attached on `bootRun` when its jar is present. The HTTP server shuts down gracefully on SIGTERM.
 
@@ -63,7 +63,7 @@ Deployment is a multi-stage **Dockerfile** (Temurin 21 build → non-root runtim
 | **Spring Data JPA** | Repositories, ORM | (via starter) |
 | **Hibernate** | JPA provider, `ddl-auto: validate` | 7.x |
 | **MySQL** | Primary database | 8.4 / 9.6 validated |
-| **Flyway** | Versioned SQL migrations (`V1`–`V29`, mirrored for PostgreSQL) | (via starter) |
+| **Flyway** | Versioned SQL migrations (`V1`–`V30`, mirrored for PostgreSQL) | (via starter) |
 | **Redis + Lettuce** | Spring Cache backend, refresh tokens, JWT blacklist, login rate limit, idempotency replay | Spring Data Redis |
 | **Lombok** | Boilerplate reduction | compileOnly |
 | **springdoc-openapi** | Swagger UI / OpenAPI 3 (+ bearer scheme) | 2.8.5 |
@@ -112,7 +112,7 @@ CREATE DATABASE nexuscommerce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 3. Ensure a user can connect to `localhost:3306` with rights on `nexuscommerce`.
 
-**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V29` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
+**Tables** are created and versioned by **Flyway** on first app start (migrations `V1`–`V30` under `src/main/resources/db/migration/`, with PostgreSQL twins under `src/main/resources/db/migration-postgres/`). Hibernate only validates the schema; it never alters it.
 
 ### 3.3 Redis setup
 
@@ -344,6 +344,7 @@ com.example.nexusCommerce/
 ├── schema/          Entities (User, Category, Product, Order, OrderProducts, Review, Cart, CartItem) + Role/OrderStatus enums
 ├── dtos/            Request/response objects (incl. AddToCartRequestDto, CartResponseDto, RefreshRequestDto)
 ├── adapters/        Entity ↔ DTO mapping (OrderAdapter, ReviewAdapter, …)
+├── search/          SearchPlan (words → facet inference) + DatabaseSearchSupport (engine detection)
 ├── security/        JwtService, JwtAuthFilter, AuthenticatedUser, RefreshTokenService, TokenBlacklistService, IdempotencyService, LoginRateLimiterInterceptor
 ├── events/          OrderPlacedEvent, OrderStatusChangedEvent, OrderEventListener (@Async @TransactionalEventListener)
 ├── exceptions/      Custom exceptions + GlobalExceptionHandler
@@ -561,6 +562,7 @@ Design guarantees that are worth knowing before modifying the domain:
 | `V27__order_lookup_indexes` | PostgreSQL-only indexes on the referencing side of every FK (`orders.user_id`, `order_products.order_id`); MySQL already creates them, so its twin is empty and only keeps the sets version-aligned |
 | `V28__rebrand_catalogue_brand` | Rewrites the seeded brand from "Plain Thread" to "Nexus Commerce". V21 is left byte-for-byte intact because Flyway validates the checksum of applied migrations |
 | `V29__guest_identity` | Lets a cart or an order belong to a **browser session** instead of an account: `user_id` becomes nullable on both tables (no sentinel user row — a guest is not a user, and inventing one would put fake rows into every join, report and admin screen), plus `guest_token`, `orders.guest_email` and a unique `orders.claim_token`. Cart uniqueness survives the split because the live generated column is NULL for a guest row and NULLs never collide in a unique index; a mirror `live_guest_token` gives one live cart per session |
+| `V30__product_full_text_search` | **PostgreSQL only** (the MySQL twin is an empty file that keeps the sets version-aligned, exactly as `V27` does): a generated, `STORED` `products.search_text tsvector` over title (weight A), brand (B), material + care (C) and description (D), a partial GIN index on it, and a `pg_trgm` GIN index on `lower(title)` so the leading-wildcard `LIKE` path has an index too. A generation expression can only read its own row, so the category *name* stays a `LIKE` branch in the query instead of becoming part of the vector |
 
 > **Why V7 uses a stored procedure.** On a fresh MySQL 8.4 database, `CREATE INDEX idx_reviews_order_product ON reviews (order_id, product_id)` makes the server **automatically drop** the FK-supporting index `fk_review_order`, because the composite already covers it. An unconditional `DROP INDEX fk_review_order` therefore fails with `1091 Can't DROP` — exactly what broke CI before commit `2afc8e8`. V7 now wraps both drops in `drop_index_if_present`, which reads `information_schema.STATISTICS` first and no-ops when the index isn't there. This lets one migration apply cleanly to both fresh CI databases and older dev databases that pre-date the composite.
 
@@ -591,7 +593,7 @@ Spring's **cache abstraction** (`@EnableCaching`) backed by **`RedisCacheManager
 | `product:by-slug` | lower-cased slug | product detail page | product updates (all entries) |
 | `product:details` | `id` | get with details | product updates (all entries) |
 | `product:by-category` | `name:page:size` | find by category name | product/category writes |
-| `product:search` | `gender\|slug\|sizes\|colors\|min\|max\|sort\|page\|size` | faceted search | product/variant/category writes |
+| `product:search:v2` | `gender\|slug\|sizes\|colors\|min\|max\|sort\|page\|size` | faceted + full-text search | product/variant/category writes |
 | `product:unique-categories` | — | distinct category names | product writes |
 | `variant:sizes` | — | `/products/facets/sizes` | product/variant writes |
 | `variant:colors` | — | `/products/facets/colors` | product/variant writes |
@@ -612,6 +614,7 @@ Two rules keep this cache from becoming a memory leak or a correctness hazard:
 
 - **Keys are built from validated, normalised input only.** `ProductSearchRequestDto` lower-cases, trims, sorts and de-dupes every facet before `cacheKey()` runs, and the controller clamps `size` at the web boundary — so `?sizes=M,L` and `?sizes=l,m` share one entry, and `?size=99999` cannot fragment the cache.
 - **Unknown values throw before the query.** An unrecognised `categorySlug`, `gender`, `sort`, or a size/colour no product sells in is rejected (**400**, or **404** for a missing category) *before* any result exists. Exceptions are never cached, so arbitrary strings cannot mint entries.
+- **A cached payload's type is part of its name.** `GenericJacksonJsonRedisSerializer` writes `@class` into every value, and `datasourceNamespace()` gives a developer's database and the deployed one the *same* prefix, so an old build and a new build reading each other's entries would fail on the wrong class rather than miss. When Phase 9 changed `/search` from a page of DTOs to `ProductSearchResponseDto`, the cache name moved to `product:search:v2` — the two builds simply never share entries, and the stale keys age out on their own TTL. Rename the cache the same way for any future payload-type change to a cached endpoint.
 
 ### 10.3 Refresh tokens (`RefreshTokenService`)
 
@@ -884,7 +887,7 @@ Send the value back unchanged as `X-Guest-Token` on cart, checkout, and order ca
 | GET | `/{id}` | Public | — | `product:by-id` |
 | GET | `/{id}/details` | Public | — | `product:details` |
 | GET | `/slug/{slug}` | Public | — | `product:by-slug` |
-| GET | `/search` | Public | `gender`, `categorySlug`, `sizes`, `colors`, `minPrice`, `maxPrice`, `sort`, `page`, `size` | `product:search` |
+| GET | `/search` | Public | `keyword`, `gender`, `categorySlug`, `sizes`, `colors`, `minPrice`, `maxPrice`, `sort`, `page`, `size` | `product:search:v2` |
 | GET | `/by-category/{categoryName}` | Public | + page/size | `product:by-category` |
 | GET | `/uniqueCategories` | Public | — | `product:unique-categories` |
 | GET | `/facets/sizes` | Public | — | `variant:sizes` |
@@ -900,6 +903,58 @@ live product sells is a `400`, and a `categorySlug` that names a parent matches 
 **case-insensitively** — the search DTO normalises before validating, so `?gender=unisex` works.
 On the write DTOs the pattern also allows the **empty string**: create normalises it to `null`,
 and update uses it to clear the column (this is how the admin editor unsets a value).
+
+**GET `/search` — the words the shopper typed (`GET /search?keyword=blck+tee`):**
+
+```json
+{
+  "success": true,
+  "message": "Products fetched successfully!",
+  "data": {
+    "content": [ { "id": 12, "title": "Garment-Dyed Crew Tee", "slug": "garment-dyed-crew-tee", "price": 2490.00 } ],
+    "page": 0,
+    "size": 12,
+    "totalElements": 2,
+    "totalPages": 1,
+    "last": true,
+    "textQuery": "tee",
+    "inferredFacets": [ { "facet": "color", "value": "Black", "word": "blck" } ]
+  }
+}
+```
+
+`content`/`page`/`size`/`totalElements`/`totalPages`/`last` are the page, unchanged from before —
+every consumer that reads `data.content` keeps working. The two additions explain the words:
+
+- **A colour or size word is a filter, not a quotation.** No product row holds the word `black` in
+  its own text — colour lives on the variant — so matching it as text answers a reasonable query
+  with an empty page. `SearchPlan` therefore matches each word against the *live* facet vocabulary
+  (`findUniqueVariantColors` / `findUniqueVariantSizes`, the same lists the filter panel advertises)
+  and moves hits into the query's `colors`/`sizes`. Words under 4 characters match only exactly, so
+  `m` and `s` cannot blur into each other; longer near-misses go by edit distance (`blck` → Black).
+- **`inferredFacets`** names each conversion — `value` is the catalogue's spelling, `word` is what
+  the shopper typed. A facet already clicked in the panel converts the word but reports no chip
+  (there's already a control that clears it). **`textQuery`** is the phrase that actually got
+  matched, after those words left. Together they let a storefront render removable chips: dropping
+  one word from the search box removes exactly that chip, because inference is deterministic over
+  whatever remains.
+- **Two read paths, one result set.** On PostgreSQL, a keyword left at the **default order** runs
+  the native ranked query (`search_text @@ websearch_to_tsquery`, ordered by `ts_rank`) — stemmed,
+  and weighted title > brand > material > description. Anything else (an explicit `sort=price,desc`,
+  MySQL, the H2 test database) runs the dialect-neutral `LIKE` path. Both return the same rows;
+  only the order differs, and a shopper who asked for price ascending wants price ascending, not
+  the best text match. "Default order" is judged on the **canonical** sort, because an omitted
+  `sort` and an explicit `sort=id,asc` hash to one cache key — deciding the path on the raw
+  parameter instead would let whichever request arrives first be served to the other, so a listing
+  would flip between relevance and id order depending on what the cache had already seen.
+  `DatabaseSearchSupport` detects the engine from the live JDBC connection rather than a config
+  flag, so a deployment pointed at MySQL with a stale "postgres" setting falls back instead of
+  failing every search on a missing column.
+- **The ranked read is two statements**: ids in relevance order, then those ids hydrated with their
+  category in one `JOIN FETCH`. `ORDER BY ts_rank` cannot ride along with a fetch join, and paging
+  by id keeps the ranking intact without an N+1. The `Pageable` handed to it must be **unsorted** —
+  Spring Data appends a sort to the end of native SQL, and a second `ORDER BY` beside the
+  `ts_rank` one is a syntax error Postgres rejects at runtime.
 
 **POST body (`CreateProductRequestDto`):**
 
@@ -1362,6 +1417,20 @@ Use `PORT=3001` (or your `.env` value). First get a token:
 - [ ] After a successful reset or password change, every `refresh::<token>` for that user is gone from Redis and the old refresh token returns **401**
 - [ ] `PATCH /api/v1/users/me` `{ "name": "New Name", "phone": "9888877766" }` → **200**; `GET /users/me` confirms it; `{ "name": "" }` → **400**
 
+### Full-text search & facet inference (Phase 9)
+
+- [ ] `GET /api/v1/products/search?keyword=blck%20tee` → **200**, `data.textQuery` is `"tee"` and `data.inferredFacets` is `[{ "facet": "color", "value": "Black", "word": "blck" }]`
+- [ ] The same query with `&colors=black` already set → the word still leaves the text, `inferredFacets` is **empty** (the panel already owns that filter)
+- [ ] `GET /api/v1/products/search?keyword=shirt&sort=price,desc` → **200**, rows strictly descending by price; with the default order the same keyword comes back by relevance (Oxford Shirt first, not the lowest id)
+- [ ] `GET /api/v1/products/search?keyword=tees` → matches "Tee" rows (stemming), and a query for a category name like `knitwear` still matches through the category `LIKE` branch
+- [ ] `GET /api/v1/products/search?keyword=%27%20or%201%3D1--` → **200** with zero or few rows, never a server error
+- [ ] `GET /api/v1/products/search?keyword=charcoal` → **200** with zero rows (a colour word the catalogue does not sell stays free text; only the `colors=` facet is validated) — while `?colors=charcoal` → **400**
+- [ ] `GET /api/v1/products/search?keyword=shirt&sort=id,asc` → the **same** rows in the same order as `?keyword=shirt` with no sort; `&sort=price,asc` then genuinely sorts by price
+- [ ] Redis keys for search are `product:search:v2:*`; after `PUT /api/v1/products/{id}` the whole cache is emptied
+- [ ] `EXPLAIN` the ranked query with `enable_seqscan = off` → `Bitmap Index Scan on idx_products_search_text_gin` (at seed volume the planner prefers a sequential scan, which is correct, not a missing index)
+
+
+
 ### Integrity spot-checks
 
 - [ ] Order for more than available stock → **400**/rollback, no partial decrement
@@ -1602,6 +1671,18 @@ cd NexusCommerceFrontend && npm run dev             # Next on 3000, expects Spri
 
 The frontend refuses to start if `API_BASE_URL` is unset (see `src/lib/api/backend.ts`) so misconfiguration fails fast instead of returning opaque 502s.
 
+### 18.6 Catalogue search in the storefront
+
+`/products` is server-rendered and every filter is a link or a GET form, so filtering needs no
+JavaScript at all. A keyword goes to `/products/search` as `keyword=`, and the response's
+`inferredFacets` (§12.4) is rendered by `src/components/catalog/inferred-facets.tsx` as chips above
+the grid — "Colour: Black", with the word the shopper typed alongside. Each chip links to the same
+listing with **only its own word** removed from the search box (`dropKeywordWord()` in
+`src/lib/catalog/query-state.ts`); because the backend re-infers deterministically from whatever
+words remain, taking one chip off leaves the others in place. The storefront never re-implements the
+matching — it only echoes back what the API said it read — so changing the inference later needs no
+frontend edit.
+
 ---
 
 ## 19. Phase 2a — apparel catalogue, wishlists, addresses and payments
@@ -1820,7 +1901,7 @@ average catches up with the evicted caches.
 |-------|-------|
 | Application | **NexusCommerce** |
 | API version prefix | `/api/v1` |
-| Schema version (Flyway) | **V29** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
+| Schema version (Flyway) | **V30** (MySQL `db/migration`, PostgreSQL `db/migration-postgres`) |
 | Related files | `README.md` (shorter overview), `Dockerfile`, `.github/workflows/ci.yml`, `docker-compose.yml`, `../NexusCommerceFrontend/README.md` (frontend workspace) |
 
 For interactive exploration, prefer **Swagger UI** at `/swagger-ui/index.html`, then click **Authorize** and paste a bearer token.

@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -22,6 +23,7 @@ import java.util.stream.Collectors;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ import com.example.nexusCommerce.dtos.GetProductResponseDto;
 import com.example.nexusCommerce.dtos.GetProductWithDetailsResponseDto;
 import com.example.nexusCommerce.dtos.GetVariantResponseDto;
 import com.example.nexusCommerce.dtos.ProductSearchRequestDto;
+import com.example.nexusCommerce.dtos.ProductSearchResponseDto;
 import com.example.nexusCommerce.dtos.UpdateProductRequestDto;
 import com.example.nexusCommerce.exceptions.DuplicateResourceException;
 import com.example.nexusCommerce.exceptions.InvalidRequestException;
@@ -45,6 +48,8 @@ import com.example.nexusCommerce.schema.Category;
 import com.example.nexusCommerce.schema.Product;
 import com.example.nexusCommerce.schema.ProductImage;
 import com.example.nexusCommerce.schema.ProductVariant;
+import com.example.nexusCommerce.search.DatabaseSearchSupport;
+import com.example.nexusCommerce.search.SearchPlan;
 import com.example.nexusCommerce.utils.PageResponse;
 import com.example.nexusCommerce.utils.Pagination;
 import com.example.nexusCommerce.utils.Slugs;
@@ -64,6 +69,7 @@ public class ProductServiceImpl implements ProductService {
     private final CartItemRepository cartItemRepository;
     private final WishlistItemRepository wishlistItemRepository;
     private final ProductAdapter productAdapter;
+    private final DatabaseSearchSupport searchSupport;
 
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = PRODUCT_ALL, key = "#page + ':' + #size", sync = true)
@@ -148,23 +154,81 @@ public class ProductServiceImpl implements ProductService {
     @Transactional(readOnly = true)
     @Cacheable(cacheNames = PRODUCT_SEARCH, key = "#query.cacheKey()", sync = true)
     @Override
-    public PageResponse<GetProductWithDetailsResponseDto> search(ProductSearchRequestDto query) {
-        validateSearch(query);
+    public ProductSearchResponseDto search(ProductSearchRequestDto query) {
+        // Read straight from the repository: this only runs on a search-cache miss, and calling
+        // the cached public methods here would self-invoke and silently bypass the proxy.
+        List<String> sizeValues = productRepository.findUniqueVariantSizes();
+        List<String> colorValues = productRepository.findUniqueVariantColors();
+        validateSearch(query, sizeValues, colorValues);
 
-        List<String> sizes = query.normalizedSizes();
-        List<String> colors = query.normalizedColors();
-        // Always exactly MAX_KEYWORD_TOKENS long, padded with nulls.
-        List<String> keywords = query.keywordTokens();
+        SearchPlan plan = SearchPlan.of(query.keywordWords(), query.normalizedColors(),
+                query.normalizedSizes(), colorValues, sizeValues);
+
+        // Ranked text is the better answer only when nothing else is asking for the rows in a
+        // particular order, and only where V30's tsvector exists to give one.
+        PageResponse<GetProductWithDetailsResponseDto> page =
+                plan.hasText() && usesDefaultSort(query) && searchSupport.supportsRankedTextSearch()
+                        ? rankedPage(query, plan)
+                        : likePage(query, plan);
+
+        return ProductSearchResponseDto.of(page, plan.hasText() ? plan.phrase() : null, plan.inferred());
+    }
+
+    /**
+     * The two-statement ranked read: ids in relevance order, then those ids with their category
+     * fetched. Hydration is looked up by id rather than streamed, so the rank order the first
+     * statement chose survives it.
+     */
+    private PageResponse<GetProductWithDetailsResponseDto> rankedPage(ProductSearchRequestDto query,
+                                                                      SearchPlan plan) {
+        List<String> sizes = plan.sizes();
+        List<String> colors = plan.colors();
+        Page<Long> ids = productRepository.searchIdsByRelevance(
+                query.normalizedGender(),
+                query.normalizedCategorySlug(),
+                plan.phrase(),
+                plan.categoryWordPattern(),
+                query.getMinPrice(),
+                query.getMaxPrice(),
+                sizes.isEmpty() ? List.of("") : sizes,
+                sizes.size(),
+                colors.isEmpty() ? List.of("") : colors,
+                colors.size(),
+                // Deliberately unsorted: Spring Data appends a Pageable's sort to native SQL
+                // after the statement text, and a second ORDER BY next to the ts_rank one is a
+                // syntax error. The relevance order lives in the query, where it has to stay.
+                PageRequest.of(query.getPage(), Pagination.clampSize(query.getSize())));
+
+        if (ids.isEmpty()) {
+            return PageResponse.ofContent(ids, List.of());
+        }
+
+        Map<Long, Product> byId = productRepository.findSearchResultsByIdIn(ids.getContent()).stream()
+                .collect(Collectors.toMap(Product::getId, product -> product));
+        List<GetProductWithDetailsResponseDto> content = ids.getContent().stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(productAdapter::mapToGetProductWithDetailsResponseDto)
+                .toList();
+        return PageResponse.ofContent(ids, content);
+    }
+
+    /** The dialect-neutral path: LIKE over five columns, sorted by whatever the caller asked for. */
+    private PageResponse<GetProductWithDetailsResponseDto> likePage(ProductSearchRequestDto query,
+                                                                   SearchPlan plan) {
+        List<String> patterns = plan.likePatterns();
+        List<String> sizes = plan.sizes();
+        List<String> colors = plan.colors();
 
         // An empty list would render "IN ()"; the count parameter is the real switch and the
         // list always keeps at least one never-matching element.
         Page<Product> products = productRepository.search(
                 query.normalizedGender(),
                 query.normalizedCategorySlug(),
-                keywords.get(0),
-                keywords.get(1),
-                keywords.get(2),
-                keywords.get(3),
+                patterns.get(0),
+                patterns.get(1),
+                patterns.get(2),
+                patterns.get(3),
                 query.getMinPrice(),
                 query.getMaxPrice(),
                 sizes.isEmpty() ? List.of("") : sizes,
@@ -178,11 +242,28 @@ public class ProductServiceImpl implements ProductService {
     }
 
     /**
+     * A ranked page and an explicit sort cannot both win: the shopper who asked for price
+     * ascending wants price ascending, not the best text match. Those queries keep the LIKE
+     * path, which returns the same rows and then orders them as asked.
+     *
+     * <p>The test is against the {@linkplain ProductSearchRequestDto#normalizedSort() canonical}
+     * sort, not the raw parameter, because that is what {@code cacheKey()} hashes: an omitted
+     * {@code sort} and an explicit {@code sort=id,asc} are one cache entry. If the path decision
+     * disagreed, whichever of the two requests arrived first would be served to the other, and a
+     * listing would silently flip between relevance order and id order depending on what the cache
+     * had already seen.
+     */
+    private static boolean usesDefaultSort(ProductSearchRequestDto query) {
+        return ProductSearchRequestDto.DEFAULT_SORT.equals(query.normalizedSort());
+    }
+
+    /**
      * Every facet is checked against the catalogue before the query runs. Spring Cache only
      * writes on a successful return, so rejecting an unknown gender, category, size or colour
      * here is also what stops a caller from minting an unlimited number of cache keys.
      */
-    private void validateSearch(ProductSearchRequestDto query) {
+    private void validateSearch(ProductSearchRequestDto query, List<String> sizeValues,
+                                List<String> colorValues) {
         Pagination.validatePage(query.getPage());
 
         String gender = query.normalizedGender();
@@ -208,12 +289,8 @@ public class ProductServiceImpl implements ProductService {
             throw new InvalidRequestException("minPrice must not exceed maxPrice");
         }
 
-        // Read straight from the repository: this only runs on a search-cache miss, and calling
-        // the cached public methods here would self-invoke and silently bypass the proxy.
-        requireKnownFacet(query.normalizedSizes(),
-                productRepository.findUniqueVariantSizes(), "size");
-        requireKnownFacet(query.normalizedColors(),
-                productRepository.findUniqueVariantColors(), "color");
+        requireKnownFacet(query.normalizedSizes(), sizeValues, "size");
+        requireKnownFacet(query.normalizedColors(), colorValues, "color");
     }
 
     private void requireKnownFacet(List<String> requested, List<String> known, String label) {
