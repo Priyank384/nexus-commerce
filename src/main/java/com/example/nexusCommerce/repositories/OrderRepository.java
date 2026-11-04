@@ -46,11 +46,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findByPaymentIntentId(String paymentIntentId);
 
     /**
-     * Resolves the link mailed with a guest's receipt back to its order. Unique per order, and
-     * soft-deleted rows are filtered out by {@code @SQLRestriction}, so a deleted order's link
-     * stops working instead of surfacing a row nobody owns.
+     * Resolves the link mailed with a guest's receipt back to its order, and locks the row in the
+     * same statement. Unique per order, and soft-deleted rows are filtered out by
+     * {@code @SQLRestriction}, so a deleted order's link stops working instead of surfacing a row
+     * nobody owns.
+     *
+     * <p>The lock matters because claiming clears the token. Read the row unlocked and two
+     * shoppers opening a forwarded link both see a valid token, both attach the order, and only
+     * one of them actually owns it. Locking on the token means the second caller waits, then
+     * re-evaluates the predicate against the committed row — where the token is already gone.
      */
-    Optional<Order> findByClaimToken(String claimToken);
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.claimToken = :claimToken")
+    Optional<Order> findByClaimTokenForUpdate(@Param("claimToken") String claimToken);
 
     long countByStatus(OrderStatus status);
 

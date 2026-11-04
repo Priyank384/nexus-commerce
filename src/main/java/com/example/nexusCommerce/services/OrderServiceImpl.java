@@ -599,14 +599,14 @@ public class OrderServiceImpl implements OrderService {
     })
     @Override
     public GetOrderResponseDto claimOrder(String claimToken, Long userId) {
-        Long orderId = orderRepository.findByClaimToken(claimToken)
-                .map(Order::getId)
+        // Locked on the token itself rather than read unlocked and locked again by id: two
+        // accounts opening a forwarded link would both pass the unlocked read, and the second
+        // would then re-attach an order it was never entitled to. The lock makes it wait, and the
+        // predicate is re-evaluated against the committed row, where the token is already gone.
+        Order order = orderRepository.findByClaimTokenForUpdate(claimToken)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "That claim link is not valid, has already been used, or belongs to a deleted order"));
-        // Lock the row a second time: two accounts opening the same forwarded link would
-        // otherwise both attach it, and the loser would see no error and no order.
-        Order order = orderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+        Long orderId = order.getId();
         User account = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
         order.setUser(account);

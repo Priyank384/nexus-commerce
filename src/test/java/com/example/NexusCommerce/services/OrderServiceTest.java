@@ -600,8 +600,7 @@ class OrderServiceTest {
         order.setGuestEmail("guest@example.com");
         order.setClaimToken("kQ7mZ2xT9vB4cL6pR8sY1uW3eA5nJ0hD7gF2kM9qXbE");
         User account = sampleUser();
-        when(orderRepository.findByClaimToken(order.getClaimToken())).thenReturn(Optional.of(order));
-        when(orderRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(order));
+        when(orderRepository.findByClaimTokenForUpdate(order.getClaimToken())).thenReturn(Optional.of(order));
         when(userRepository.findById(1L)).thenReturn(Optional.of(account));
         when(orderProductsRepository.findByOrderWithProduct(order)).thenReturn(List.of());
         when(orderAdapter.mapToGetOrderResponseDto(any(Order.class), anyList()))
@@ -618,7 +617,7 @@ class OrderServiceTest {
 
     @Test
     void claimOrder_withAnUnknownOrAlreadyUsedToken_isNotFound() {
-        when(orderRepository.findByClaimToken("nope")).thenReturn(Optional.empty());
+        when(orderRepository.findByClaimTokenForUpdate("nope")).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> orderService.claimOrder("nope", 1L));
         verify(orderRepository, never()).save(any(Order.class));
