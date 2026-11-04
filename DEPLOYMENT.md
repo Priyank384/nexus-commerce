@@ -209,9 +209,10 @@ code deliberately tolerates would page on noise.
    | `NEXT_PUBLIC_SITE_URL` | `https://<your-domain>` — canonical origin for canonicals, Open Graph, `sitemap.ts`, `robots.ts` and JSON-LD |
    | `NEXT_PUBLIC_SUPPORT_EMAIL` | An address someone actually answers. `/contact` publishes it only when set; unset, the page says so plainly instead of printing an inbox nobody reads |
 
-   Set `API_BASE_URL` for **Preview as well as Production**: the build succeeds without it — CI
-   proves that, since no request is made at build time — but every catalogue read 500s at runtime,
-   because `backendUrl()` throws when the variable is missing.
+   Set `API_BASE_URL` for **Preview as well as Production**: the build succeeds without it — the
+   frontend's CI builds with no `API_BASE_URL` at all, which is only possible because every
+   data-backed route awaits `connection()` so the build never reaches for the store — but every
+   catalogue read 500s at runtime, because `backendUrl()` throws when the variable is missing.
 
    **No Razorpay variable belongs here.** Checkout reads the key id off the backend's payment
    ticket, so the merchant credential never reaches the browser bundle.
