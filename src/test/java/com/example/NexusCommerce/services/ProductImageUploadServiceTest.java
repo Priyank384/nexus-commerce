@@ -65,7 +65,8 @@ class ProductImageUploadServiceTest {
     }
 
     private static MockMultipartFile png() {
-        return new MockMultipartFile("file", "look.png", "image/png", new byte[] {1, 2, 3});
+        return new MockMultipartFile("file", "look.png", "image/png",
+                new byte[] { (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2 });
     }
 
     @Test
@@ -106,11 +107,39 @@ class ProductImageUploadServiceTest {
     @Test
     void upload_rejectsUnsupportedContentType() {
         when(productRepository.findById(42L)).thenReturn(Optional.of(product()));
-        MockMultipartFile gif = new MockMultipartFile("file", "x.gif", "image/gif", new byte[] {1});
+        MockMultipartFile gif = new MockMultipartFile("file", "x.gif", "image/gif",
+                new byte[] { 'G', 'I', 'F', '8', '9', 'a' });
 
         assertThrows(InvalidRequestException.class, () -> service.upload(42L, gif));
         verify(imageStorage, never()).store(any(), anyString(), anyString());
         verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void upload_rejectsBytesMislabeledAsAPng() {
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product()));
+        MockMultipartFile script = new MockMultipartFile("file", "look.png", "image/png",
+                new byte[] { '<', 's', 'c', 'r', 'i', 'p', 't', '>' });
+
+        assertThrows(InvalidRequestException.class, () -> service.upload(42L, script));
+        verify(imageStorage, never()).store(any(), anyString(), anyString());
+    }
+
+    @Test
+    void upload_storesTheTypeTheBytesAreRatherThanTheTypeTheCallerClaimed() throws Exception {
+        Product product = product();
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        when(imageRepository.findByProductIdOrderByPositionAsc(42L)).thenReturn(List.of());
+        when(imageRepository.save(any(ProductImage.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(imageStorage.store(any(), eq(".jpg"), eq("image/jpeg")))
+                .thenReturn("/uploads/products/new.jpg");
+        MockMultipartFile jpeg = new MockMultipartFile("file", "look.png", "image/png",
+                new byte[] { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x01 });
+
+        service.upload(42L, jpeg);
+
+        verify(imageStorage).store(any(), eq(".jpg"), eq("image/jpeg"));
+        assertEquals("/uploads/products/new.jpg", product.getImage());
     }
 
     @Test
